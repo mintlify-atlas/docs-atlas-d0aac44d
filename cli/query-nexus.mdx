@@ -1,0 +1,684 @@
+---
+title: "Nexus Query Commands — Axelar CLI Reference (axelard)"
+sidebarTitle: "Nexus Queries"
+description: "Reference for all axelard query nexus subcommands: chains, assets, fees, transfers, messages, maintainers, and nexus module parameters."
+---
+
+The `axelard query nexus` command group exposes read-only queries into Axelar's Nexus module — the cross-chain routing layer that manages registered chains, assets, fees, and pending transfers. Use these subcommands to inspect the state of any supported chain or asset pair without submitting any transaction.
+
+<Info>
+  All Nexus query subcommands share common flags for node connection (`--node`, `--grpc-addr`), historical queries (`--height`), and output formatting (`--output`). Omitting `--height` queries the latest committed state.
+</Info>
+
+## Global Flags
+
+The following flags are inherited by every `axelard query nexus` subcommand.
+
+<ParamField path="--home" type="string">
+  Directory for config and data. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+<ParamField path="--log_format" type="string">
+  Logging format: `json` or `plain`. Defaults to `plain`.
+</ParamField>
+
+<ParamField path="--log_level" type="string">
+  Logging level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, or `panic`. Defaults to `info`.
+</ParamField>
+
+<ParamField path="--output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+<ParamField path="--trace" type="boolean">
+  Print full stack trace on errors.
+</ParamField>
+
+---
+
+## Subcommands
+
+<Accordion title="chains — List registered chains">
+
+Returns the list of chain names registered in the Nexus module, optionally filtered by activation status.
+
+**Syntax**
+
+```bash
+axelard query nexus chains [flags]
+```
+
+**Flags**
+
+<ParamField path="--status" type="string">
+  Filter chains by activation status. Accepted values: `activated` or `deactivated`.
+</ParamField>
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels. If not set, the server must use TLS.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height. May error if the node is pruning state.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+# List all chains regardless of status
+axelard query nexus chains
+
+# List only activated chains
+axelard query nexus chains --status activated
+
+# List deactivated chains in JSON format
+axelard query nexus chains --status deactivated --output json
+```
+
+**Example output**
+
+```
+chains:
+- Ethereum
+- Avalanche
+- Osmosis
+- Axelarnet
+- cosmoshub
+```
+
+</Accordion>
+
+<Accordion title="chain-state — Get chain activation state">
+
+Returns the current state of a chain registered in the Nexus module, including whether it is active, its supported assets, and its maintainer set.
+
+**Syntax**
+
+```bash
+axelard query nexus chain-state [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the chain to query (e.g., `Ethereum`, `Osmosis`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query nexus chain-state Ethereum
+axelard query nexus chain-state Osmosis --output json
+```
+
+**Example output**
+
+```
+state:
+  chain:
+    name: Ethereum
+    supports_foreign_assets: true
+    key_type: KEY_TYPE_MULTISIG
+    module: evm
+  activated: true
+  assets:
+  - denom: "uaxl"
+```
+
+</Accordion>
+
+<Accordion title="chain-maintainers — List validators maintaining a chain">
+
+Returns the set of validators currently maintaining (i.e., running infrastructure for and voting on events from) the specified chain. Validators must maintain chains they are assigned to in order to earn rewards.
+
+**Syntax**
+
+```bash
+axelard query nexus chain-maintainers [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the chain to query maintainers for (e.g., `Ethereum`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query nexus chain-maintainers Ethereum
+axelard query nexus chain-maintainers Avalanche --output json
+```
+
+**Example output**
+
+```
+maintainers:
+- axelarvaloper1abc...
+- axelarvaloper1def...
+- axelarvaloper1ghi...
+```
+
+<Note>
+  A chain must have a sufficient number of active maintainers to process cross-chain transfers. If too many maintainers go offline, transfer processing may be delayed.
+</Note>
+
+</Accordion>
+
+<Accordion title="assets — List registered assets for a chain">
+
+Returns the list of assets (by denomination) that are registered for cross-chain transfers on the specified chain.
+
+**Syntax**
+
+```bash
+axelard query nexus assets [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the chain to query registered assets for (e.g., `Ethereum`, `cosmoshub`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query nexus assets Ethereum
+axelard query nexus assets cosmoshub --output json
+```
+
+**Example output**
+
+```
+assets:
+- denom: "uaxl"
+  is_native_asset: false
+- denom: "weth-wei"
+  is_native_asset: true
+- denom: "uusdc"
+  is_native_asset: false
+```
+
+</Accordion>
+
+<Accordion title="chain-by-asset — Find chains an asset is registered on">
+
+Returns all chains on which the specified asset is registered. This is useful for discovering which chains support a particular cross-chain asset.
+
+**Syntax**
+
+```bash
+axelard query nexus chain-by-asset [asset] [flags]
+```
+
+**Arguments**
+
+<ParamField path="asset" type="string" required>
+  The asset denomination to search for (e.g., `uaxl`, `weth-wei`, `uusdc`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query nexus chain-by-asset uaxl
+axelard query nexus chain-by-asset uusdc --output json
+```
+
+**Example output**
+
+```
+chains:
+- Ethereum
+- Avalanche
+- Polygon
+- Axelarnet
+- Osmosis
+```
+
+</Accordion>
+
+<Accordion title="fee-info — Get fee configuration for a chain and asset">
+
+Returns the per-chain fee configuration for a registered asset. The fee info includes the fee rate, minimum fee, and maximum fee applied when transferring the asset through the specified chain.
+
+**Syntax**
+
+```bash
+axelard query nexus fee-info [chain] [asset] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the chain (e.g., `Ethereum`, `Avalanche`).
+</ParamField>
+
+<ParamField path="asset" type="string" required>
+  The asset denomination to query fees for (e.g., `uaxl`, `uusdc`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query nexus fee-info Ethereum uaxl
+axelard query nexus fee-info Avalanche uusdc --output json
+```
+
+**Example output**
+
+```
+fee_info:
+  chain: "Ethereum"
+  asset: "uaxl"
+  fee_rate: "0.001"
+  min_fee: "100000"
+  max_fee: "100000000"
+```
+
+<Tip>
+  Use `transfer-fee` to compute the actual fee for a specific transfer amount between two chains, rather than inspecting raw fee parameters here.
+</Tip>
+
+</Accordion>
+
+<Accordion title="transfer-fee — Estimate fee for a cross-chain transfer">
+
+Returns the total fee that would be incurred on a cross-chain transfer of a specified amount between two chains. This helps users and integrators estimate net received amounts before initiating a transfer.
+
+**Syntax**
+
+```bash
+axelard query nexus transfer-fee [source-chain] [destination-chain] [amount] [flags]
+```
+
+**Arguments**
+
+<ParamField path="source-chain" type="string" required>
+  The name of the chain where the transfer originates (e.g., `Ethereum`).
+</ParamField>
+
+<ParamField path="destination-chain" type="string" required>
+  The name of the destination chain (e.g., `Avalanche`, `Osmosis`).
+</ParamField>
+
+<ParamField path="amount" type="string" required>
+  The amount to transfer, including denomination (e.g., `1000000uaxl`, `500000uusdc`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query nexus transfer-fee Ethereum Avalanche 1000000uaxl
+axelard query nexus transfer-fee Ethereum Osmosis 500000uusdc --output json
+```
+
+**Example output**
+
+```
+fee:
+  denom: "uaxl"
+  amount: "1000"
+```
+
+</Accordion>
+
+<Accordion title="transfers-for-chain — List transfers by chain and state">
+
+Returns the list of cross-chain transfers for a given chain, filtered by transfer state. Supports pagination for large result sets. The state must be one of `pending`, `archived`, or `insufficient_amount`.
+
+**Syntax**
+
+```bash
+axelard query nexus transfers-for-chain [chain] [state] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the chain to query transfers for (e.g., `Ethereum`).
+</ParamField>
+
+<ParamField path="state" type="string" required>
+  The transfer state to filter by. Accepted values: `pending`, `archived`, or `insufficient_amount`.
+</ParamField>
+
+**Flags**
+
+<ParamField path="--count-total" type="boolean">
+  Count the total number of records matching the query.
+</ParamField>
+
+<ParamField path="--limit" type="integer">
+  Number of records to return per page. Defaults to `100`.
+</ParamField>
+
+<ParamField path="--offset" type="integer">
+  Pagination offset — number of records to skip.
+</ParamField>
+
+<ParamField path="--page" type="integer">
+  Pagination page number. Sets offset to `page * limit`. Defaults to `1`.
+</ParamField>
+
+<ParamField path="--page-key" type="string">
+  Pagination cursor key for keyset pagination.
+</ParamField>
+
+<ParamField path="--reverse" type="boolean">
+  Return results in descending order.
+</ParamField>
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+# List pending transfers for Ethereum
+axelard query nexus transfers-for-chain Ethereum pending
+
+# List archived transfers with pagination
+axelard query nexus transfers-for-chain Ethereum archived --limit 50 --page 2
+
+# List transfers in reverse order
+axelard query nexus transfers-for-chain Ethereum pending --reverse
+```
+
+**Example output**
+
+```
+transfers:
+- id: 123
+  sender:
+    chain: "Ethereum"
+    address: "0xabc..."
+  recipient:
+    chain: "Avalanche"
+    address: "0xdef..."
+  asset:
+    denom: "uaxl"
+    amount: "500000"
+  state: TRANSFER_STATE_PENDING
+pagination:
+  total: 1
+```
+
+</Accordion>
+
+<Accordion title="message — Get cross-chain message by ID">
+
+Returns the cross-chain message corresponding to the given message ID. Messages represent general message passing (GMP) payloads routed through Axelar's network.
+
+**Syntax**
+
+```bash
+axelard query nexus message [id] [flags]
+```
+
+**Arguments**
+
+<ParamField path="id" type="string" required>
+  The unique identifier of the cross-chain message to retrieve.
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query nexus message 0xabc123def456...
+axelard query nexus message some-message-id --output json
+```
+
+**Example output**
+
+```
+message:
+  id: "0xabc123..."
+  source_chain: "Ethereum"
+  source_address: "0x1234..."
+  destination_chain: "Avalanche"
+  destination_address: "0x5678..."
+  payload_hash: "0xdeadbeef..."
+  status: APPROVED
+  asset:
+    denom: "uusdc"
+    amount: "1000000"
+```
+
+</Accordion>
+
+<Accordion title="params — Get Nexus module parameters">
+
+Returns the on-chain governance parameters for the Nexus module. These parameters control cross-chain routing behaviour, including chain and asset management policies.
+
+**Syntax**
+
+```bash
+axelard query nexus params [flags]
+```
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query nexus params
+axelard query nexus params --output json
+```
+
+**Example output**
+
+```
+params:
+  chain_activation_threshold: "60/100"
+  chain_maintainer_missing_vote_penalty_count: 1000
+  chain_maintainer_incorrect_vote_penalty_count: 50
+  chain_maintainer_check_period: 100
+  gateway: "axelar1..."
+  end_blocker_limit: 50
+```
+
+</Accordion>

@@ -1,0 +1,223 @@
+---
+title: "Multisig Module: Threshold Signing for Cross-Chain Ops"
+sidebarTitle: "Multisig"
+description: "The Multisig module coordinates threshold multi-party key generation and signing sessions, enabling Axelar validators to collectively sign EVM command batches and rotate gateway keys."
+---
+
+The Multisig module implements distributed threshold cryptography for Axelar validators. It manages the full lifecycle of multi-party key generation (keygen) and signing sessions used to authorize gateway command batches on EVM chains. When a validator set needs to sign a new command batch or rotate the active gateway key, this module coordinates the distributed signing ceremony across all participating validators.
+
+<CardGroup cols={2}>
+  <Card title="Key Generation" icon="key">
+    Runs distributed keygen sessions where validators collectively produce a shared key without any single party holding the full secret.
+  </Card>
+  <Card title="Signing Sessions" icon="pen-nib">
+    Aggregates individual validator signatures into threshold-valid multisig proofs that can be verified on EVM chains.
+  </Card>
+  <Card title="Key Rotation" icon="rotate">
+    Supports rotating the active key for any chain, allowing the validator set composition to change while maintaining gateway operatorship.
+  </Card>
+  <Card title="Opt-In / Opt-Out" icon="toggle-on">
+    Validators can opt into or out of specific keygen sessions, controlling their participation in chain-specific signing duties.
+  </Card>
+</CardGroup>
+
+## Key Concepts
+
+### KeyID
+
+A `KeyID` is a unique string identifier for a generated key. It is assigned at the start of a keygen session and referenced throughout signing and rotation.
+
+### KeygenSession
+
+A `KeygenSession` represents an active distributed key generation ceremony:
+
+```go
+func NewKeygenSession(
+    id exported.KeyID,
+    keygenThreshold utils.Threshold,
+    signingThreshold utils.Threshold,
+    snapshot snapshot.Snapshot,
+    expiresAt int64,
+    gracePeriod int64,
+) KeygenSession {
+    return KeygenSession{
+        Key: Key{
+            ID:               id,
+            Snapshot:         snapshot,
+            SigningThreshold: signingThreshold,
+        },
+        State:           exported.Pending,
+        KeygenThreshold: keygenThreshold,
+        ExpiresAt:       expiresAt,
+        GracePeriod:     gracePeriod,
+    }
+}
+```
+
+The session is `Pending` until enough validators submit public keys, then transitions to `Completed`.
+
+### SigningSession
+
+A `SigningSession` collects individual signature shares from validators for a specific payload hash:
+
+```go
+func NewSigningSession(
+    id uint64,
+    key Key,
+    payloadHash exported.Hash,
+    expiresAt int64,
+    gracePeriod int64,
+    module string,
+    moduleMetadataProto ...codec.ProtoMarshaler,
+) SigningSession
+```
+
+Once the `SigningThreshold` of validators have submitted their signatures, the session completes and the aggregated signature is available for broadcast.
+
+### Key
+
+A `Key` holds the aggregated public key material produced by a completed keygen session, along with the snapshot of validators that participated and their signing threshold.
+
+### KeyEpoch
+
+`KeyEpoch` tracks key rotation history — each chain can have multiple historical keys, and a new epoch is created each time `rotate` is called:
+
+```go
+func NewKeyEpoch(epoch uint64, chain nexus.ChainName, keyID exported.KeyID) KeyEpoch {
+    return KeyEpoch{Epoch: epoch, Chain: chain, KeyID: keyID}
+}
+```
+
+## Keygen Lifecycle
+
+<Steps>
+  <Step title="Start Keygen">
+    A governance-authorized account starts a new keygen session for a specific key ID. The current validator snapshot is taken as the participant set.
+    ```bash
+    axelard tx multisig keygen start [key-id] \
+      --from <gov-key> \
+      --chain-id axelar-dojo-1
+    ```
+  </Step>
+  <Step title="Opt-In / Opt-Out">
+    Validators may opt in to participate in the keygen or opt out if they choose not to.
+    ```bash
+    axelard tx multisig keygen opt-in [key-id] \
+      --from <proxy-key>
+    axelard tx multisig keygen opt-out [key-id] \
+      --from <proxy-key>
+    ```
+  </Step>
+  <Step title="Submit Public Keys">
+    Each participating validator's vald process submits its public key contribution to the session.
+  </Step>
+  <Step title="Session Completes">
+    Once the keygen threshold is reached, the session is marked completed and the new key is stored.
+  </Step>
+</Steps>
+
+## Signing Flow
+
+When the EVM module calls `sign-commands`, the Multisig module creates a new signing session:
+
+1. A `SigningSession` is created with the current active key for the target chain.
+2. Each validator's `vald` process observes the session and submits its signature share.
+3. Once the `SigningThreshold` of validators have signed, the session completes.
+4. The aggregated `CommandBatch` signature is stored and can be queried for submission to the gateway.
+
+<Note>
+Signing sessions have a `SigningTimeout` (default 50 blocks) and a `SigningGracePeriod` (default 3 blocks) after expiry during which late submissions are still accepted.
+</Note>
+
+## Key Rotation
+
+Rotate a chain to use a newly generated key. This also triggers a `transferOperatorship` command on the gateway:
+
+```bash
+axelard tx multisig rotate ethereum [new-key-id] \
+  --from <gov-key> \
+  --chain-id axelar-dojo-1
+```
+
+After rotation, the old key epoch is archived and the new key becomes the active signing key for all subsequent `sign-commands` calls on that chain.
+
+## Module Parameters
+
+<Accordion title="Multisig Parameters">
+  <ParamField path="KeygenThreshold" type="Threshold" required>
+    Minimum fraction of validators that must submit public keys for a keygen session to complete. Default: `80/100`.
+  </ParamField>
+
+  <ParamField path="SigningThreshold" type="Threshold" required>
+    Minimum fraction of the keygen participants that must submit signatures for a signing session to complete. Default: `60/100`.
+  </ParamField>
+
+  <ParamField path="KeygenTimeout" type="int64" required>
+    Number of blocks before a keygen session expires. Default: `50` blocks (10 × 5 for 1s block time).
+  </ParamField>
+
+  <ParamField path="KeygenGracePeriod" type="int64" required>
+    Number of blocks after `KeygenTimeout` during which late public key submissions are still accepted. Default: `3`.
+  </ParamField>
+
+  <ParamField path="SigningTimeout" type="int64" required>
+    Number of blocks before a signing session expires. Default: `50` blocks.
+  </ParamField>
+
+  <ParamField path="SigningGracePeriod" type="int64" required>
+    Number of blocks after `SigningTimeout` during which late signatures are still accepted. Default: `3`.
+  </ParamField>
+
+  <ParamField path="ActiveEpochCount" type="uint64" required>
+    Number of past key epochs retained in active state. Older epochs are archived. Default: `5`.
+  </ParamField>
+</Accordion>
+
+<Warning>
+The `KeygenTimeout` and `SigningTimeout` were updated from 10 to 50 blocks in v1.3.0 to match 1-second block times. In practice this preserves approximately the same wall-clock duration as before.
+</Warning>
+
+## CLI Reference
+
+### Query Commands
+
+```bash
+# Get the key associated with a key ID
+axelard query multisig key [key-id]
+
+# Query the currently active key ID for a chain
+axelard query multisig key-id ethereum
+
+# Get the next key ID scheduled for rotation on a chain
+axelard query multisig next-key-id ethereum
+
+# Inspect a keygen session by key ID
+axelard query multisig keygen-session [key-id]
+
+# Show multisig module parameters
+axelard query multisig params
+```
+
+### Transaction Commands
+
+```bash
+# Start a new keygen session
+axelard tx multisig keygen start [key-id] \
+  --from <gov-key>
+
+# Opt in to a keygen session
+axelard tx multisig keygen opt-in [key-id] \
+  --from <proxy-key>
+
+# Opt out of a keygen session
+axelard tx multisig keygen opt-out [key-id] \
+  --from <proxy-key>
+
+# Rotate a chain to a new key
+axelard tx multisig rotate ethereum [new-key-id] \
+  --from <gov-key>
+```
+
+<Tip>
+Query `axelard query multisig keygen-session [key-id]` during an active ceremony to see how many validators have submitted public keys and whether the threshold has been reached.
+</Tip>

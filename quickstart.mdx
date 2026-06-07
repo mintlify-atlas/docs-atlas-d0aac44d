@@ -1,47 +1,294 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Quickstart: Build and Run an Axelar Core Node"
+sidebarTitle: "Quickstart"
+description: "Install dependencies, build or download a verified axelard binary, satisfy the EVM bytecode requirement, and launch your first Axelar Core node."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
+Getting Axelar Core up and running requires three things: the `axelard` binary, the EVM gateway smart-contract bytecode, and a minimal node configuration. This guide walks through every approach — building from source (dynamic and static), downloading a pre-built release binary with GPG verification, and using the official Docker image — so you can choose the path that best fits your environment.
 
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
+<Info>
+  For a release build, check out the corresponding release tag first:
+  ```bash
+  git checkout vX.Y.Z
+  ```
+  All build commands below must be run from the repository root.
+</Info>
 
 ## Prerequisites
 
-Before you begin, you must have:
+- **Go 1.23+** (required for source builds)
+- **Docker** (required for `make build-static` and `make docker-image`)
+- **Git** and standard build tools (`make`, `gcc`)
+- **GPG** (required if verifying a downloaded binary)
 
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
+---
 
-## Get started
+## Option 1: Build from Source
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
-
+  <Step title="Clone the repository">
     ```bash
-    npm install your-package
+    git clone https://github.com/axelarnetwork/axelar-core.git
+    cd axelar-core
     ```
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
 
+  <Step title="Satisfy the smart-contract bytecode dependency">
+    The EVM module requires compiled gateway contract bytecode from the [`axelar-cgp-solidity`](https://github.com/axelarnetwork/axelar-cgp-solidity/releases) repository before the project can be built or run locally.
+
+    1. Check the required bytecode version:
+       ```bash
+       cat contract-version.json
+       ```
+    2. Download the matching release from [axelar-cgp-solidity releases](https://github.com/axelarnetwork/axelar-cgp-solidity/releases) — for example, `Bytecode-v4.3.0.zip`.
+    3. Unzip the JSON files into the `contract-artifacts/` directory:
+       ```bash
+       unzip Bytecode-v4.3.0.zip -d contract-artifacts/
+       ```
+    4. Generate the Go contract bindings:
+       ```bash
+       make generate
+       ```
+       This produces `x/evm/types/contracts.go` from the bytecode artifacts.
+  </Step>
+
+  <Step title="Build the binary">
+    <Tabs>
+      <Tab title="Static (Recommended)">
+        The static build uses Docker to compile against musl libc, producing a portable binary that runs on any Linux distribution without glibc compatibility issues.
+
+        ```bash
+        make build-static
+        ```
+
+        The `axelard` binary is extracted from the Docker image and placed in `./bin/axelard`.
+
+        <Tip>
+          Use optional flags to customize the build:
+          ```bash
+          # Disable CosmWasm support
+          make build-static WASM=false
+
+          # Enable IBC Wasm hooks
+          make build-static IBC_WASM_HOOKS=true
+          ```
+        </Tip>
+      </Tab>
+      <Tab title="Dynamic">
+        The dynamic build compiles directly against your system's glibc. It is faster but may not be portable to other Linux distributions.
+
+        ```bash
+        make build
+        ```
+
+        The `axelard` binary is placed in `./bin/axelard`.
+
+        <Warning>
+          Dynamic binaries depend on your system's glibc version. Avoid this for production deployments on heterogeneous infrastructure.
+        </Warning>
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Verify the build">
     ```bash
-    your-cli init
+    ./bin/axelard version
+    ```
+    The output should display the version, commit hash, and build tags (e.g., `ledger`, `muslc`).
+  </Step>
+</Steps>
+
+---
+
+## Option 2: Download and Verify a Release Binary
+
+Pre-built binaries are published on the [Axelar Core releases page](https://github.com/axelarnetwork/axelar-core/releases). Each binary is signed with Axelar's GPG key and should be verified before use.
+
+<Steps>
+  <Step title="Download the binary and signature file">
+    Visit the [releases page](https://github.com/axelarnetwork/axelar-core/releases) and download:
+    - The `axelard` binary for your OS and architecture (e.g., `axelard-linux-amd64-v0.34.3`)
+    - The corresponding `.asc` signature file (e.g., `axelard-linux-amd64-v0.34.3.asc`)
+  </Step>
+
+  <Step title="Import Axelar's public GPG key">
+    ```bash
+    curl https://keybase.io/axelardev/pgp_keys.asc | gpg --import
     ```
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+
+  <Step title="Trust the imported key">
+    Enter GPG interactive mode for Axelar's key fingerprint `5D9FFADEED11FA5D`:
 
     ```bash
-    your-cli start
+    gpg --edit-key 5D9FFADEED11FA5D
+    ```
+
+    At the `gpg>` prompt, type `trust`, select **option 5** (I trust ultimately), confirm with `y`, then type `quit`.
+  </Step>
+
+  <Step title="Verify the binary signature">
+    ```bash
+    gpg --verify axelard-linux-amd64-v0.34.3.asc axelard-linux-amd64-v0.34.3
+    ```
+
+    A successful verification produces output like:
+    ```
+    Good signature from "Axelar Network Devs <eng@axelar.network>" [ultimate]
+    ```
+
+    <Warning>
+      Do **not** use the binary if the signature check fails or shows `BAD signature`. Discard the file and re-download from the official releases page.
+    </Warning>
+  </Step>
+
+  <Step title="Make the binary executable">
+    ```bash
+    chmod +x axelard-linux-amd64-v0.34.3
+    mv axelard-linux-amd64-v0.34.3 /usr/local/bin/axelard
+    axelard version
     ```
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+---
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
+## Option 3: Docker Image
+
+<Steps>
+  <Step title="Build the Docker image">
+    ```bash
+    make docker-image
+    ```
+    This creates the image `axelar/core:latest`. For a debug image with [Delve](https://github.com/go-delve/delve) support:
+    ```bash
+    make docker-image-debug
+    ```
+    This creates `axelar/core-debug:latest`.
+  </Step>
+
+  <Step title="Run the node in Docker">
+    ```bash
+    docker run -it --rm \
+      -v "$HOME/.axelar:/root/.axelar" \
+      axelar/core axelard start
+    ```
+
+    Mount a host directory for persistent state so chain data survives container restarts.
+  </Step>
+</Steps>
+
+---
+
+## Initializing and Starting the Node
+
+Once you have the `axelard` binary available, initialize and start the node:
+
+<Steps>
+  <Step title="Initialize the node">
+    Replace `my-node` with a human-readable moniker that identifies your node on the network:
+
+    ```bash
+    axelard init my-node --chain-id axelar-dojo-1
+    ```
+
+    This creates a default configuration and genesis template under `~/.axelar/`:
+    ```
+    ~/.axelar/
+    ├── config/
+    │   ├── app.toml
+    │   ├── config.toml
+    │   └── genesis.json
+    └── data/
+    ```
+  </Step>
+
+  <Step title="Download the genesis file and seeds">
+    Obtain the `genesis.json` and peer addresses for the network you are joining. For the Axelar mainnet:
+    ```bash
+    # Replace with the current mainnet genesis and seed list from the Axelar docs
+    curl -o ~/.axelar/config/genesis.json \
+      https://raw.githubusercontent.com/axelarnetwork/axelar-chains-config/main/info/mainnet/genesis.json
+    ```
+
+    <Note>
+      Refer to the [Axelar documentation](https://docs.axelar.dev) for the current canonical genesis file URL and seed node list for each network (mainnet, testnet).
+    </Note>
+  </Step>
+
+  <Step title="Start the node">
+    ```bash
+    axelard start
+    ```
+
+    To see all available flags:
+    ```bash
+    axelard start --help
+    ```
+
+    Common options:
+    ```bash
+    axelard start \
+      --home ~/.axelar \
+      --log_level info \
+      --p2p.seeds "node-id@host:26656"
+    ```
+  </Step>
+
+  <Step title="(Validators) Start the vald sidecar">
+    Validators must also run the `vald` process, which subscribes to CometBFT events and submits cross-chain confirmation votes. Run it in a separate terminal after the node is synced:
+
+    ```bash
+    axelard vald-start \
+      --validator-addr axelarvaloper1... \
+      --tofnd-host localhost \
+      --tofnd-port 50051 \
+      --from broadcaster
+    ```
+
+    <Note>
+      `vald` connects to the `tofnd` threshold-signing daemon over gRPC. Ensure `tofnd` is running and reachable before starting `vald`. See the [Architecture](./architecture) page for the full component topology.
+    </Note>
+  </Step>
+</Steps>
+
+---
+
+## Interacting with the Node
+
+With a node running, use the `axelard` CLI to query state or submit transactions:
+
+```bash
+# Check node status
+axelard status
+
+# Query connected chains
+axelard query nexus chains
+
+# Query EVM chain info
+axelard query evm chains
+
+# Get help for any subcommand
+axelard tx --help
+axelard query --help
+```
+
+<Tip>
+  For the full list of available CLI commands, see the [CLI Reference](/cli/overview) or run `axelard <command> --help` after building the binaries.
 </Tip>
+
+---
+
+## API Documentation
+
+To browse in-code Go documentation locally:
+
+```bash
+# Install godoc if not already installed
+GO111MODULE=off go install -u golang.org/x/tools/cmd/godoc
+
+# Start the documentation server on port 8080
+godoc -http ":8080" -index
+```
+
+Browse to [http://localhost:8080/pkg/github.com/axelarnetwork/axelar-core](http://localhost:8080/pkg/github.com/axelarnetwork/axelar-core). The `-index` flag makes the documentation full-text searchable.

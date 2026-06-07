@@ -1,0 +1,278 @@
+---
+title: "Multisig Transaction Commands for Axelar Core CLI"
+sidebarTitle: "Multisig Transactions"
+description: "Submit multisig module transactions with axelard: start key generation, opt in or out of keygens, and rotate chain keys using proxy addresses."
+---
+
+The `axelard tx multisig` command group provides transaction subcommands for managing the Axelar multisig key lifecycle. Validators use these commands to participate in distributed key generation (keygen), control their participation in future keygen rounds, and rotate the active signing key for a given EVM chain. All keygen participation commands must be sent from the validator's registered **proxy address**, not the validator operator address.
+
+<Note>
+  The sender for `keygen opt-in`, `keygen opt-out`, and `keygen start` must be a **proxy address** registered for a validator via `axelard tx snapshot register-proxy`. Using an operator address directly will result in an error.
+</Note>
+
+## Subcommands
+
+<Accordion title="keygen start — Initiate a key generation round">
+
+Initiates a new multisig key generation protocol for the Axelar network. A unique key ID must be provided; this ID will be used in subsequent commands such as `rotate` to refer to the generated key.
+
+**Syntax**
+
+```bash
+axelard tx multisig keygen start [flags]
+```
+
+**Key Flags**
+
+<ParamField path="--id" type="string" required>
+  Unique identifier for the new key being generated (e.g. `my-eth-key-v2`). This flag is required.
+</ParamField>
+
+<ParamField path="--from" type="string" required>
+  Proxy address of the validator initiating the keygen.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Axelar network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`). Use `"auto"` for automatic estimation.
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price in decimal format (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  Broadcasting mode: `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend: `os`, `file`, `kwallet`, `pass`, `test`, or `memory` (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Start a keygen round
+axelard tx multisig keygen start \
+  --id my-eth-key-v2 \
+  --from myproxy \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl \
+  --broadcast-mode sync
+```
+</CodeGroup>
+
+<Info>
+  Once `keygen start` is broadcast, all opted-in validators will participate in the distributed key generation protocol. The resulting key can be referenced by the `--id` value in `rotate` and other commands.
+</Info>
+
+</Accordion>
+
+<Accordion title="keygen opt-in — Opt into future keygen rounds">
+
+Registers the sender's proxy address to participate in future key generation rounds. Once opted in, the validator's share will be included in subsequent multisig key constructions.
+
+**Syntax**
+
+```bash
+axelard tx multisig keygen opt-in [flags]
+```
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Proxy address of the validator opting in. Must be a registered proxy for a validator.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Opt into future keygens
+axelard tx multisig keygen opt-in \
+  --from myproxy \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl \
+  --broadcast-mode sync
+```
+</CodeGroup>
+
+<Tip>
+  Opt in before a new keygen round is initiated to ensure your validator's key share is included. Validators that are opted out are excluded from the resulting threshold key.
+</Tip>
+
+</Accordion>
+
+<Accordion title="keygen opt-out — Opt out of future keygen rounds">
+
+Removes the sender's proxy address from participation in future key generation rounds. The validator will no longer be included in subsequent multisig key constructions until they opt back in.
+
+**Syntax**
+
+```bash
+axelard tx multisig keygen opt-out [flags]
+```
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Proxy address of the validator opting out.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Opt out of future keygens
+axelard tx multisig keygen opt-out \
+  --from myproxy \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl \
+  --broadcast-mode sync
+```
+</CodeGroup>
+
+<Warning>
+  Opting out during an active keygen round does not remove your participation from that round. The change takes effect only for future rounds initiated after this transaction is confirmed.
+</Warning>
+
+</Accordion>
+
+<Accordion title="rotate — Rotate the active key for a chain">
+
+Rotates the signing key for a given chain to a previously generated key identified by `keyID`. After rotation, the new key is used for all subsequent gateway command signing on that chain.
+
+**Syntax**
+
+```bash
+axelard tx multisig rotate [chain] [keyID] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  Name of the chain whose active signing key will be rotated (e.g. `ethereum`).
+</ParamField>
+
+<ParamField path="keyID" type="string" required>
+  Identifier of the new key to rotate to. This key must have been generated via `keygen start` with the same ID.
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address. Typically the proxy address of a validator.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Rotate Ethereum to a new key
+axelard tx multisig rotate ethereum my-eth-key-v2 \
+  --from myproxy \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl \
+  --broadcast-mode sync
+```
+</CodeGroup>
+
+<Warning>
+  After rotating, you must also transfer operatorship on the EVM gateway contract to the new key's address using `axelard tx evm transfer-operatorship` followed by `axelard tx evm sign-commands`. Without this step, the on-chain gateway will still use the old key.
+</Warning>
+
+</Accordion>
+
+## Key Generation Workflow
+
+The following sequence illustrates the typical end-to-end multisig key rotation flow:
+
+```
+1. axelard tx multisig keygen opt-in   --from <proxy>
+2. axelard tx multisig keygen start    --id <new-key-id> --from <proxy>
+   (validators participate in distributed key generation)
+3. axelard tx multisig rotate          <chain> <new-key-id> --from <proxy>
+4. axelard tx evm transfer-operatorship <chain> <new-key-id> --from <proxy>
+5. axelard tx evm sign-commands        <chain> --from <proxy>
+   (submit the signed payload to the EVM gateway contract)
+```
+
+## Common Flags
+
+All `axelard tx multisig` subcommands accept the following standard transaction flags:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--from` | — | Key name or address used to sign (use proxy address) |
+| `--chain-id` | `axelar` | Network chain ID |
+| `--gas` | `200000` | Gas limit; use `auto` for estimation |
+| `--gas-adjustment` | `1` | Multiplier applied to simulated gas estimate |
+| `--gas-prices` | `0.007uaxl` | Gas price in decimal format |
+| `--broadcast-mode` | `sync` | Broadcasting mode (`sync` \| `async`) |
+| `--keyring-backend` | `file` | Keyring backend (`os` \| `file` \| `test` \| `memory`) |
+| `--node` | `tcp://localhost:26657` | CometBFT RPC endpoint |
+| `--yes` | `true` | Skip interactive confirmation prompt |

@@ -1,0 +1,351 @@
+---
+title: "Vald: Axelar's External Validator Daemon Explained"
+sidebarTitle: "Vald"
+description: "Learn how vald monitors EVM chains, participates in threshold signing via tofnd, and connects to axelard over RPC. Covers configuration, startup flags, and proxy registration."
+---
+
+Vald (Validator Daemon) is a long-running process that runs alongside `axelard` on validator nodes. While `axelard` handles consensus and on-chain state, vald watches for cross-chain events — such as new EVM gateway transactions or multisig keygen sessions — and participates in threshold signing by relaying signing requests to the `tofnd` daemon. Vald connects to the `axelard` node via CometBFT RPC and broadcasts transactions back to the chain using a dedicated broadcaster account.
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────────┐
+│         Axelar Validator Host       │
+│                                     │
+│  ┌──────────┐    ┌───────────────┐  │
+│  │ axelard  │◄──►│     vald      │  │
+│  │ (node)   │    │               │  │
+│  └──────────┘    │  ┌─────────┐  │  │
+│    CometBFT RPC  │  │  tofnd  │  │  │
+│    gRPC          │  │(signing)│  │  │
+│                  │  └─────────┘  │  │
+│                  └───────────────┘  │
+└─────────────────────────────────────┘
+         │
+         ▼
+   EVM Chain RPCs
+   (Ethereum, Avalanche, etc.)
+```
+
+Vald subscribes to block events from the `axelard` CometBFT RPC, processes the following event types:
+
+- `ChainAdded` — a new EVM chain has been registered
+- `ConfirmTokenStarted` — a token confirmation has been initiated
+- `ConfirmKeyTransferStarted` — a key transfer confirmation has been initiated
+- `ConfirmGatewayTxsStarted` — gateway transaction confirmations have been initiated
+- `KeygenStarted` — a multisig keygen session has begun
+- `SigningStarted` — a multisig signing session has begun
+
+When vald detects a signing event, it forwards the request to `tofnd` over gRPC and then broadcasts the threshold signature result back to `axelard`.
+
+## Starting Vald
+
+```bash
+axelard vald-start \
+  --validator-addr axelarvaloper1... \
+  --tofnd-host localhost \
+  --tofnd-port 50051 \
+  --from broadcaster \
+  --node tcp://localhost:26657 \
+  --chain-id axelar-dojo-1
+```
+
+### Key Flags
+
+<ParamField path="--validator-addr" type="string" required>
+  The bech32 validator operator address (`axelarvaloper1...`). Vald uses this to identify which signing sessions belong to this validator.
+</ParamField>
+
+<ParamField path="--from" type="string">
+  Name or address of the broadcaster key in the local keyring. This account signs and broadcasts transactions on behalf of the validator. Falls back to the `broadcast.broadcaster-account` field in `vald.toml`.
+</ParamField>
+
+<ParamField path="--tofnd-host" type="string">
+  Hostname of the `tofnd` threshold signing daemon. Defaults to `localhost`.
+</ParamField>
+
+<ParamField path="--tofnd-port" type="string">
+  Port of the `tofnd` daemon. Defaults to `50051`.
+</ParamField>
+
+<ParamField path="--tofnd-dial-timeout" type="string">
+  Timeout for the initial gRPC connection to `tofnd`. Defaults to `15s`.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  CometBFT RPC endpoint of the local `axelard` node. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID. Defaults to `axelar`.
+</ParamField>
+
+<ParamField path="--gas-adjustment" type="float">
+  Multiplier applied to the simulated gas estimate. Defaults to `4`. Vald simulates each transaction before broadcasting.
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price used when broadcasting. Defaults to `0.007uaxl`.
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend for the broadcaster key: `os`, `file`, `test`, or `memory`. Defaults to `file`.
+</ParamField>
+
+## vald.toml Configuration
+
+Vald reads `~/.axelar/config/vald.toml` for detailed configuration. Below are all fields from `ValdConfig`:
+
+### ValdConfig Fields
+
+<ParamField path="max_batch_size" type="int" default="250">
+  Maximum number of messages merged into a single transaction batch when the broadcaster queue is under high load. Increasing this also requires increasing `MaxUnpackAnySubCalls` in the application.
+</ParamField>
+
+<ParamField path="batch_threshold" type="int" default="3">
+  Minimum number of pending broadcast requests before vald starts merging them into batches. Below this threshold, messages are broadcast individually.
+</ParamField>
+
+<ParamField path="max_blocks_behind_latest" type="int64" default="50">
+  Maximum number of blocks behind the latest tip for a cached block height to remain valid. If vald falls further behind, it discards the stored height and starts from the latest block.
+</ParamField>
+
+<ParamField path="event_notifications_max_retries" type="int" default="3">
+  Maximum number of retry attempts when fetching blocks from the CometBFT node via block event subscription.
+</ParamField>
+
+<ParamField path="event_notifications_back_off" type="duration" default="1s">
+  Backoff duration between retry attempts for block event fetching.
+</ParamField>
+
+<ParamField path="max_latest_block_age" type="duration" default="15s">
+  Maximum age of the latest block for vald to consider the node in sync. If the latest block is older than this, vald waits for the node to catch up. Should be set well above the expected block time.
+</ParamField>
+
+<ParamField path="no_new_blocks_timeout" type="duration" default="2m">
+  Duration after which vald panics if no new block has been seen. This is a safety mechanism to detect and recover from stalled states. Once at least one block has been observed, vald will crash if no new block arrives within this window.
+</ParamField>
+
+### BroadcastConfig Fields
+
+These live under the `[broadcast]` section in `vald.toml`:
+
+<ParamField path="broadcast.max_retries" type="int" default="5">
+  Maximum number of retry attempts for a failed broadcast. All broadcasts go through a serialized queue, so retries block other broadcasts.
+</ParamField>
+
+<ParamField path="broadcast.min_sleep_before_retry" type="duration" default="1s">
+  Base sleep duration for exponential backoff between broadcast retries.
+</ParamField>
+
+<ParamField path="broadcast.max_timeout" type="duration" default="10s">
+  Maximum time to wait for a broadcasted transaction to be included in a block.
+</ParamField>
+
+<ParamField path="broadcast.confirmation_polling_interval" type="duration" default="400ms">
+  How often vald polls the node to check whether a broadcasted transaction has been included in a block.
+</ParamField>
+
+<ParamField path="broadcast.broadcaster-account" type="string">
+  Default keyring key name used as the broadcaster when `--from` is not passed on the command line.
+</ParamField>
+
+### TssConfig (tofnd connection)
+
+Under the `[tss]` section:
+
+<ParamField path="tss.tofnd-host" type="string" default="localhost">
+  Hostname of the tofnd daemon. Can be overridden by `--tofnd-host`.
+</ParamField>
+
+<ParamField path="tss.tofnd-port" type="string" default="50051">
+  Port of the tofnd daemon. Can be overridden by `--tofnd-port`.
+</ParamField>
+
+<ParamField path="tss.tofnd-dial-timeout" type="duration" default="15s">
+  Timeout for establishing the gRPC connection to tofnd.
+</ParamField>
+
+### Example vald.toml
+
+```toml
+[broadcast]
+broadcaster-account = "broadcaster"
+max_retries = 5
+min_sleep_before_retry = "1s"
+max_timeout = "10s"
+confirmation_polling_interval = "400ms"
+
+[tss]
+tofnd-host = "localhost"
+tofnd-port = "50051"
+tofnd-dial-timeout = "15s"
+
+max_batch_size = 250
+batch_threshold = 3
+max_blocks_behind_latest = 50
+event_notifications_max_retries = 3
+event_notifications_back_off = "1s"
+max_latest_block_age = "15s"
+no_new_blocks_timeout = "2m"
+
+[[axelar_bridge_evm]]
+name = "Ethereum"
+rpc_addr = "https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY"
+start-with-bridge = true
+
+[[axelar_bridge_evm]]
+name = "avalanche"
+rpc_addr = "https://api.avax.network/ext/bc/C/rpc"
+start-with-bridge = true
+```
+
+## EVM Chain Configuration
+
+Each EVM chain that vald monitors needs an entry in `[[axelar_bridge_evm]]`:
+
+<ParamField path="name" type="string" required>
+  The chain name as registered on Axelar (case-insensitive internally). Examples: `Ethereum`, `avalanche`, `Polygon`.
+</ParamField>
+
+<ParamField path="rpc_addr" type="string" required>
+  JSON-RPC HTTP(S) endpoint for the chain. Vald calls `eth_getBlockByNumber`, `eth_getTransactionReceipt`, and related methods.
+</ParamField>
+
+<ParamField path="start-with-bridge" type="bool" default="true">
+  Whether vald should activate the bridge listener for this chain. Set to `false` to configure the chain entry without monitoring it.
+</ParamField>
+
+<ParamField path="finality_override" type="string">
+  Override the finality strategy for this chain. Options depend on the chain (e.g., `confirmation_depth`). Leave unset to use the on-chain default.
+</ParamField>
+
+<Warning>
+  The `l1_chain_name` field is deprecated. If you have it in your config, remove it. Vald will log a warning and ignore it.
+</Warning>
+
+## tofnd Integration
+
+`tofnd` is the threshold signing daemon that holds key shares and performs distributed key generation (DKG) and signing operations. Vald connects to it over gRPC and delegates all cryptographic operations to it.
+
+<Steps>
+  <Step title="Start tofnd">
+    Tofnd must be running and reachable on the configured host/port before vald starts. Refer to the [tofnd documentation](https://github.com/axelarnetwork/tofnd) for installation and startup instructions.
+
+    ```bash
+    tofnd --mnemonic path/to/mnemonic.txt --port 50051
+    ```
+  </Step>
+
+  <Step title="Verify connectivity">
+    ```bash
+    axelard health-check \
+      --tofnd-host localhost \
+      --tofnd-port 50051 \
+      --node tcp://localhost:26657
+    ```
+  </Step>
+</Steps>
+
+## Proxy Registration
+
+Validators broadcast transactions through a designated proxy (broadcaster) account so that the validator's private key does not need to be kept online. The proxy must be registered on-chain before vald can operate.
+
+```bash
+axelard tx snapshot register-proxy <proxy-address> \
+  --from <validator-key-name> \
+  --chain-id axelar-dojo-1 \
+  --gas auto \
+  --gas-adjustment 1.4 \
+  --gas-prices 0.007uaxl
+```
+
+<Note>
+  `<proxy-address>` is the `axelar1...` address of the broadcaster account that vald will use to sign and submit transactions. `--from` should be your validator's key (the `axelarvaloper1...` operator key).
+</Note>
+
+## Keygen Opt-In
+
+Validators must explicitly opt into future multisig keygen rounds. The sender should be the proxy (broadcaster) address:
+
+```bash
+axelard tx multisig keygen opt-in \
+  --from broadcaster \
+  --chain-id axelar-dojo-1 \
+  --gas auto \
+  --gas-adjustment 1.4 \
+  --gas-prices 0.007uaxl
+```
+
+To opt out of future keygens:
+
+```bash
+axelard tx multisig keygen opt-out \
+  --from broadcaster \
+  --chain-id axelar-dojo-1 \
+  --gas auto \
+  --gas-adjustment 1.4 \
+  --gas-prices 0.007uaxl
+```
+
+## Running Vald as a systemd Service
+
+Create `/etc/systemd/system/vald.service`:
+
+```toml
+[Unit]
+Description=Axelar Vald Daemon
+After=axelard.service
+
+[Service]
+User=axelard
+ExecStart=/usr/local/bin/axelard vald-start \
+  --validator-addr axelarvaloper1... \
+  --from broadcaster \
+  --tofnd-host localhost \
+  --tofnd-port 50051 \
+  --node tcp://localhost:26657 \
+  --chain-id axelar-dojo-1 \
+  --home /home/axelard/.axelar \
+  --log_format json
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable vald
+sudo systemctl start vald
+journalctl -fu vald
+```
+
+## Vald State File
+
+Vald persists the last processed block height to `~/.axelar/vald/state.json`. On restart, vald reads this file and resumes from where it left off (or from the latest block if the stored height is too far behind, as controlled by `max_blocks_behind_latest`).
+
+```bash
+cat ~/.axelar/vald/state.json
+# {"height": 12345678}
+```
+
+If this file becomes corrupted or you want to force a fresh start from the latest block, delete it before restarting vald:
+
+```bash
+rm ~/.axelar/vald/state.json
+```
+
+## Recovery from tofnd Key Loss
+
+If the tofnd key material needs to be recovered from a mnemonic, pass the recovery file path when starting vald:
+
+```bash
+axelard vald-start \
+  --tofnd-recovery=/path/to/recovery.json \
+  --validator-addr axelarvaloper1... \
+  --from broadcaster
+```
+
+The Docker entrypoint also supports this through the `RECOVERY_FILE` environment variable.

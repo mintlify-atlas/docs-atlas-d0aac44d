@@ -1,0 +1,346 @@
+---
+title: "Running an Axelar Node: Start, Sync & Operate"
+sidebarTitle: "Running"
+description: "Start axelard, sync from genesis or state sync, monitor health and metrics endpoints, manage snapshots, and perform common operational tasks like rollback and pruning."
+---
+
+Once your node is built and configured, running it is a matter of invoking `axelard start`. The daemon embeds CometBFT in-process and begins syncing the chain state from either genesis or a state sync snapshot. This page covers the start command and its most important flags, available monitoring endpoints, snapshot management, and the operational commands you'll reach for most often.
+
+## Starting the Node
+
+```bash
+axelard start --home ~/.axelar
+```
+
+The process is long-running. It will block and emit structured log lines to stdout. Use a process manager (systemd, supervisord, or Docker) to keep it running across reboots.
+
+### Key Flags
+
+<ParamField path="--home" type="string">
+  Path to the node home directory. Defaults to `$HOME/.axelar`. Override this when running multiple nodes on the same host.
+</ParamField>
+
+<ParamField path="--log_level" type="string">
+  Log verbosity: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, or `panic`. Defaults to `info`. Use `debug` when diagnosing issues.
+</ParamField>
+
+<ParamField path="--log_format" type="string">
+  `plain` (default, human-readable) or `json` (structured, better for log aggregators like Loki or Datadog).
+</ParamField>
+
+<ParamField path="--p2p.laddr" type="string">
+  P2P listen address. Default `tcp://0.0.0.0:26656`. Change the port if it conflicts with another service.
+</ParamField>
+
+<ParamField path="--rpc.laddr" type="string">
+  CometBFT RPC listen address. Default `tcp://127.0.0.1:26657`. Bind to `127.0.0.1` unless you intentionally expose the RPC.
+</ParamField>
+
+<ParamField path="--minimum-gas-prices" type="string">
+  Override `app.toml` minimum gas prices at runtime. Example: `0.007uaxl`.
+</ParamField>
+
+<ParamField path="--pruning" type="string">
+  Override the pruning strategy. One of `default`, `nothing`, `everything`, or `custom`.
+</ParamField>
+
+<ParamField path="--p2p.seeds" type="string">
+  Comma-separated list of `ID@host:port` seed nodes passed directly without editing `config.toml`.
+</ParamField>
+
+<ParamField path="--halt-height" type="uint">
+  Stop the node gracefully at a specific block height. Useful for planned upgrades.
+</ParamField>
+
+<ParamField path="--grpc.enable" type="bool">
+  Enable or disable the gRPC server. Defaults to `true`.
+</ParamField>
+
+### Full Example
+
+```bash
+axelard start \
+  --home ~/.axelar \
+  --log_level info \
+  --log_format json \
+  --p2p.laddr tcp://0.0.0.0:26656 \
+  --rpc.laddr tcp://127.0.0.1:26657 \
+  --minimum-gas-prices 0.007uaxl \
+  --grpc.address localhost:9090 \
+  --api.enable \
+  --api.address tcp://localhost:1317
+```
+
+## Syncing Strategies
+
+<Tabs>
+  <Tab title="Genesis Sync">
+    Replay every block from block 1. This is the most trustless option but can take days for a mature chain.
+
+    ```bash
+    # Ensure state sync is disabled in config.toml
+    axelard config set config statesync.enable false
+    axelard start --home ~/.axelar
+    ```
+
+    <Info>
+      You can monitor progress by querying the local RPC:
+
+      ```bash
+      curl -s http://localhost:26657/status | jq '.result.sync_info'
+      ```
+    </Info>
+  </Tab>
+
+  <Tab title="State Sync">
+    Download a recent state snapshot from trusted peers and only replay blocks from that height forward. Much faster than genesis sync.
+
+    <Steps>
+      <Step title="Find a trusted block">
+        ```bash
+        curl -s https://axelar-rpc.polkachu.com/block \
+          | jq '.result.block.header | {height, hash: .last_block_id.hash}'
+        ```
+      </Step>
+
+      <Step title="Configure state sync">
+        ```bash
+        axelard config set config statesync.enable true
+        axelard config set config statesync.rpc_servers \
+          "https://axelar-rpc.polkachu.com:443,https://axelar-rpc.polkachu.com:443"
+        axelard config set config statesync.trust_height 12345678
+        axelard config set config statesync.trust_hash "ABCDEF..."
+        ```
+      </Step>
+
+      <Step title="Start the node">
+        ```bash
+        axelard start --home ~/.axelar
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Health Check
+
+The `axelard health-check` command validates that the node, the broadcaster account, and the optional `tofnd` daemon are all reachable and functional:
+
+```bash
+axelard health-check \
+  --node tcp://localhost:26657 \
+  --operator-addr axelarvaloper1...
+```
+
+### Flags
+
+<ParamField path="--node" type="string">
+  CometBFT RPC endpoint to check. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="--operator-addr" type="string">
+  Validator operator address (`axelarvaloper1...`) to check on-chain registration.
+</ParamField>
+
+<ParamField path="--tofnd-host" type="string">
+  Hostname of the `tofnd` signing daemon. Defaults to `localhost`.
+</ParamField>
+
+<ParamField path="--tofnd-port" type="string">
+  Port of the `tofnd` daemon. Defaults to `50051`.
+</ParamField>
+
+<ParamField path="--skip-broadcaster" type="bool">
+  Skip the broadcaster account check.
+</ParamField>
+
+<ParamField path="--skip-tofnd" type="bool">
+  Skip the tofnd connectivity check. Useful for non-validator full nodes.
+</ParamField>
+
+## Monitoring Endpoints
+
+A running `axelard` node exposes several endpoints:
+
+| Endpoint | Default Address | Purpose |
+|----------|----------------|---------|
+| CometBFT RPC | `http://localhost:26657` | Block queries, transaction broadcast, node status |
+| REST API | `http://localhost:1317` | Cosmos SDK REST / Swagger UI |
+| gRPC | `localhost:9090` | Cosmos SDK gRPC queries and transactions |
+| gRPC-Web | Proxied via gRPC port | Browser-compatible gRPC |
+| Prometheus | `http://localhost:26660/metrics` | Node metrics for Grafana |
+
+### Enable Prometheus
+
+Prometheus metrics are emitted by CometBFT. Enable the endpoint in `config.toml`:
+
+```toml
+[instrumentation]
+prometheus = true
+prometheus_listen_addr = ":26660"
+namespace = "cometbft"
+```
+
+Then restart the node and point your Prometheus scrape config at `http://<node-ip>:26660/metrics`.
+
+### Useful RPC Queries
+
+```bash
+# Node sync status
+curl -s http://localhost:26657/status | jq '.result.sync_info'
+
+# Latest block height
+curl -s http://localhost:26657/abci_info | jq '.result.response.last_block_height'
+
+# Node ID
+curl -s http://localhost:26657/status | jq -r '.result.node_info.id'
+
+# Connected peers
+curl -s http://localhost:26657/net_info | jq '.result.n_peers'
+```
+
+## Snapshot Management
+
+Snapshots let you quickly restore a node without replaying the full chain history. The `axelard snapshots` family of commands manages the local snapshot store.
+
+### List Available Snapshots
+
+```bash
+axelard snapshots list --home ~/.axelar
+```
+
+### Export a Snapshot
+
+Take a snapshot of the current application state and save it to the snapshot store:
+
+```bash
+axelard snapshots export --home ~/.axelar
+```
+
+<Note>
+  The node must not be running when you export a snapshot manually. For live exports, configure `state-sync.snapshot-interval` in `app.toml` and restart the node.
+</Note>
+
+### Load a Snapshot Archive
+
+Load a portable `.tar.gz` archive into the local snapshot store:
+
+```bash
+axelard snapshots load snapshot.tar.gz --home ~/.axelar
+```
+
+### Restore from a Snapshot
+
+Apply a previously loaded snapshot to reset application state:
+
+```bash
+axelard snapshots restore <height> <format> --home ~/.axelar
+```
+
+### Dump a Snapshot
+
+Export a snapshot from the store as a portable archive:
+
+```bash
+axelard snapshots dump <height> <format> --home ~/.axelar
+```
+
+## Operational Commands
+
+### Rolling Back One Block
+
+If the node has diverged due to an incorrect app hash, roll back one block:
+
+```bash
+axelard rollback --home ~/.axelar
+```
+
+Use `--hard` to remove the last block entirely (not just revert state):
+
+```bash
+axelard rollback --hard --home ~/.axelar
+```
+
+<Warning>
+  Only use `--hard` if instructed by the Axelar team or if you fully understand the implications. The blocks are not removed from the chain — upon restart, transactions from the removed block will be re-executed.
+</Warning>
+
+### Pruning Historical State
+
+Manually prune old state without running the full node:
+
+```bash
+# Use the default strategy (keep last 362880 states)
+axelard prune default --home ~/.axelar
+
+# Keep only the most recent 100 states
+axelard prune custom --pruning-keep-recent 100 --home ~/.axelar
+
+# Archive: keep nothing (delete everything except the 2 latest)
+axelard prune everything --home ~/.axelar
+```
+
+### Resetting CometBFT State
+
+<Warning>
+  This is a destructive operation that deletes all chain data. Use only on a node you intend to re-sync from scratch.
+</Warning>
+
+```bash
+axelard comet unsafe-reset-all --home ~/.axelar
+```
+
+## Running as a systemd Service
+
+Create `/etc/systemd/system/axelard.service`:
+
+```toml
+[Unit]
+Description=Axelar Core Node
+After=network-online.target
+
+[Service]
+User=axelard
+ExecStart=/usr/local/bin/axelard start --home /home/axelard/.axelar --log_format json
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable axelard
+sudo systemctl start axelard
+journalctl -fu axelard
+```
+
+## Running with Docker
+
+The official Docker image sets up the home directory at `/home/axelard/.axelar` and reads several environment variables:
+
+| Variable | Purpose |
+|----------|---------|
+| `HOME_DIR` | Base directory (default `/home/axelard`) |
+| `TOFND_HOST` | Hostname of the tofnd signing daemon |
+| `AXELARD_CHAIN_ID` | Chain ID (default `axelar-testnet-lisbon-3`) |
+| `AXELARD_KEYRING_BACKEND` | Keyring backend type (default `file`) |
+| `PEERS_FILE` | Path to a file containing comma-separated seed peers |
+| `CONFIG_PATH` | Directory with custom `config.toml`, `app.toml`, and `vald.toml` |
+| `PRESTART_SCRIPT` | Path to a shell script that runs before node startup |
+| `NODE_MONIKER` | Node moniker |
+
+```bash
+docker run -d \
+  --name axelard \
+  -e AXELARD_CHAIN_ID=axelar-dojo-1 \
+  -e NODE_MONIKER=my-node \
+  -v ~/.axelar:/home/axelard/.axelar \
+  -p 26656:26656 \
+  -p 26657:26657 \
+  axelar/core
+```

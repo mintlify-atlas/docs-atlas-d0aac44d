@@ -1,0 +1,461 @@
+---
+title: "Axelarnet Transaction Commands for Axelar Core CLI"
+sidebarTitle: "Axelarnet Transactions"
+description: "Submit Axelarnet module transactions with axelard: add Cosmos chains, register assets, route IBC transfers, and relay general messages."
+---
+
+The `axelard tx axelarnet` command group contains all transaction subcommands for managing the Axelarnet module. These commands let operators register new Cosmos-based chains and their assets, configure fee collection, route pending IBC transfers, relay approved general messages, and recover from failed IBC transfers. Most operations require governance approval or validator-level privileges.
+
+## Subcommands
+
+<Accordion title="add-cosmos-based-chain — Register a new Cosmos chain">
+
+Adds a new Cosmos-SDK-based chain to the Axelar network. You must supply the chain's human-readable name, its bech32 address prefix, the IBC path used to connect it, and one or more native asset denoms.
+
+**Syntax**
+
+```bash
+axelard tx axelarnet add-cosmos-based-chain [name] [address-prefix] [ibc-path] [native-asset]... [flags]
+```
+
+**Arguments**
+
+<ParamField path="name" type="string" required>
+  Human-readable name for the Cosmos chain (e.g. `osmosis`).
+</ParamField>
+
+<ParamField path="address-prefix" type="string" required>
+  Bech32 address prefix used by the chain (e.g. `osmo`).
+</ParamField>
+
+<ParamField path="ibc-path" type="string" required>
+  IBC connection path that links Axelar to the chain (e.g. `channel-3`).
+</ParamField>
+
+<ParamField path="native-asset" type="string" required>
+  One or more native asset denoms supported by the chain (space-separated, e.g. `uosmo`).
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Name or address of the signing key.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Axelar network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`). Use `"auto"` for automatic estimation.
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price in decimal format (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  Broadcasting mode: `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend: `os`, `file`, `kwallet`, `pass`, `test`, or `memory` (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Register Osmosis
+axelard tx axelarnet add-cosmos-based-chain \
+  osmosis osmo channel-3 uosmo \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl \
+  --broadcast-mode sync
+```
+</CodeGroup>
+
+<Note>
+  This command is typically submitted via a governance proposal. Ensure the IBC path is verified and active before registration.
+</Note>
+
+</Accordion>
+
+<Accordion title="register-asset — Register an asset on a Cosmos chain">
+
+Registers a new asset denomination on an already-registered Cosmos-based chain. This makes the asset recognisable within the Axelar routing system.
+
+**Syntax**
+
+```bash
+axelard tx axelarnet register-asset [chain] [denom] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  Name of the registered Cosmos chain (e.g. `osmosis`).
+</ParamField>
+
+<ParamField path="denom" type="string" required>
+  Asset denomination to register (e.g. `uosmo` or an IBC denom hash).
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--is-native-asset" type="bool">
+  Pass this flag if the asset is a native token of the Cosmos chain rather than an IBC-transferred asset.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Register a native asset
+axelard tx axelarnet register-asset osmosis uosmo \
+  --is-native-asset \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+
+```bash Register an IBC asset
+axelard tx axelarnet register-asset osmosis \
+  ibc/1234ABCD... \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+</Accordion>
+
+<Accordion title="register-fee-collector — Set the fee collector account">
+
+Designates the Axelarnet account that will collect cross-chain transfer fees. Only one fee collector can be active at a time; calling this command again replaces the existing address.
+
+**Syntax**
+
+```bash
+axelard tx axelarnet register-fee-collector [fee-collector] [flags]
+```
+
+**Arguments**
+
+<ParamField path="fee-collector" type="string" required>
+  Bech32 Axelar address that will receive collected fees (e.g. `axelar1...`).
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Register fee collector
+axelard tx axelarnet register-fee-collector axelar1feeCollectorAddress \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+</Accordion>
+
+<Accordion title="execute-pending-transfers — Execute all pending Axelarnet transfers">
+
+Triggers execution of all pending cross-chain transfers that are queued for the Axelar chain. This command is typically called by relayers or automated scripts to process accumulated transfer events.
+
+**Syntax**
+
+```bash
+axelard tx axelarnet execute-pending-transfers [flags]
+```
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Execute all pending transfers
+axelard tx axelarnet execute-pending-transfers \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl \
+  --broadcast-mode sync
+```
+</CodeGroup>
+
+<Tip>
+  Schedule this command to run periodically in your relayer setup to avoid a backlog of pending transfers building up on the Axelar chain.
+</Tip>
+
+</Accordion>
+
+<Accordion title="route-ibc-transfers — Route pending IBC transfers to Cosmos chains">
+
+Dispatches all pending outbound IBC transfers from Axelar to their respective destination Cosmos chains. Relayers call this as part of the normal cross-chain transfer flow.
+
+**Syntax**
+
+```bash
+axelard tx axelarnet route-ibc-transfers [flags]
+```
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Route pending IBC transfers
+axelard tx axelarnet route-ibc-transfers \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl \
+  --broadcast-mode sync
+```
+</CodeGroup>
+
+</Accordion>
+
+<Accordion title="route-message — Route an approved general message">
+
+Routes a previously approved general message to its destination chain. The caller supplies the message ID (assigned at approval time) and the ABI-encoded payload to forward.
+
+**Syntax**
+
+```bash
+axelard tx axelarnet route-message [message-id] [payload] [flags]
+```
+
+**Arguments**
+
+<ParamField path="message-id" type="string" required>
+  Unique identifier of the approved general message (assigned by the Axelar network upon approval).
+</ParamField>
+
+<ParamField path="payload" type="string" required>
+  ABI-encoded or hex-encoded payload bytes to forward to the destination contract.
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Route an approved message
+axelard tx axelarnet route-message \
+  "ethereum-2|0xTxHash-1" \
+  0xEncodedPayload \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+<Info>
+  The message must have been approved through the Axelar voting process before routing. Use `axelard q axelarnet message` to check the approval status.
+</Info>
+
+</Accordion>
+
+<Accordion title="retry-ibc-transfer — Retry a failed IBC transfer">
+
+Re-attempts an IBC transfer that previously failed (for example, due to a closed channel or a timeout). Provide the numeric transfer ID that was assigned when the transfer was originally queued.
+
+**Syntax**
+
+```bash
+axelard tx axelarnet retry-ibc-transfer [transfer-id] [flags]
+```
+
+**Arguments**
+
+<ParamField path="transfer-id" type="uint64" required>
+  Numeric identifier of the failed IBC transfer to retry.
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Retry a failed IBC transfer
+axelard tx axelarnet retry-ibc-transfer 42 \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+<Warning>
+  Before retrying, verify that the IBC channel is open and operational on both ends. Retrying against a permanently closed channel will fail again.
+</Warning>
+
+</Accordion>
+
+## Common Flags
+
+All `axelard tx axelarnet` subcommands accept the following standard transaction flags:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--from` | — | Key name or address used to sign |
+| `--chain-id` | `axelar` | Network chain ID |
+| `--gas` | `200000` | Gas limit; use `auto` for estimation |
+| `--gas-adjustment` | `1` | Multiplier applied to simulated gas estimate |
+| `--gas-prices` | `0.007uaxl` | Gas price in decimal format |
+| `--broadcast-mode` | `sync` | Broadcasting mode (`sync` \| `async`) |
+| `--keyring-backend` | `file` | Keyring backend (`os` \| `file` \| `test` \| `memory`) |
+| `--node` | `tcp://localhost:26657` | CometBFT RPC endpoint |
+| `--yes` | `true` | Skip interactive confirmation prompt |

@@ -1,0 +1,204 @@
+---
+title: "axelard CLI Reference: Overview and Command Groups"
+sidebarTitle: "Overview"
+description: "Complete reference for the axelard binary: global flags, command groups, version and status checks, health-check, and the vald validator daemon commands."
+---
+
+The `axelard` binary is the all-in-one command-line interface for running and interacting with an Axelar Network node. Built on the Cosmos SDK, it handles everything from node initialization and key management to submitting cross-chain transactions and operating the external validator daemon (`vald`). Whether you are spinning up a new validator, querying chain state, or bootstrapping genesis, `axelard` is the single entry-point for every operation.
+
+## Getting the Binary
+
+Download the pre-built release from the [Axelar Core GitHub releases page](https://github.com/axelarnetwork/axelar-core/releases) and place the binary somewhere on your `$PATH`:
+
+```bash
+# Verify installation
+axelard version
+```
+
+The default home directory is `$HOME/.axelar`. Every command that reads or writes local state accepts a `--home` flag to override this location.
+
+---
+
+## Global Flags
+
+These flags are inherited by every `axelard` subcommand.
+
+<ParamField path="--home" type="string">
+  Directory for config and data. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+<ParamField path="--log_level" type="string">
+  Logging verbosity: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, or `panic`. Defaults to `info`.
+</ParamField>
+
+<ParamField path="--log_format" type="string">
+  Log output format: `json` or `plain`. Defaults to `plain`.
+</ParamField>
+
+<ParamField path="--trace" type="boolean">
+  Print a full stack trace on errors. Useful for debugging.
+</ParamField>
+
+<ParamField path="--output" type="string">
+  Output format for commands that return structured data: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring storage backend for signing operations: `os`, `file`, `kwallet`, `pass`, `test`, or `memory`. Defaults to `file`.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  The network chain ID (e.g. `axelar-dojo-1`). Required for transaction-signing commands.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  CometBFT RPC endpoint to connect to, in `host:port` form. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+---
+
+## Quick Status Checks
+
+Use these commands to verify your binary and node are working correctly before diving into deeper operations.
+
+### `axelard version`
+
+Prints the application binary version information.
+
+```bash
+axelard version
+axelard version --long          # Full build info
+axelard version --output json   # Machine-readable output
+```
+
+### `axelard status`
+
+Queries the remote node for its current status, including sync state, latest block height, and validator info. Output defaults to JSON.
+
+```bash
+axelard status
+axelard status --node tcp://my-node:26657
+axelard status --output json
+```
+
+<Tip>
+  Use `axelard status | jq '.SyncInfo.catching_up'` to quickly check whether your node has caught up with the network.
+</Tip>
+
+### `axelard health-check`
+
+Performs a readiness check against the node and the TSS daemon (`tofnd`). Reports whether the broadcaster account is funded, the operator is registered, and the TSS sidecar is reachable.
+
+```bash
+axelard health-check \
+  --operator-addr axelarvaloper1... \
+  --tofnd-host localhost \
+  --tofnd-port 50051
+```
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--operator-addr` | — | Operator address to check |
+| `--tofnd-host` | `localhost` | Hostname of the TSS daemon |
+| `--tofnd-port` | `50051` | Port of the TSS daemon |
+| `--skip-broadcaster` | false | Skip broadcaster balance check |
+| `--skip-operator` | false | Skip operator registration check |
+| `--skip-tofnd` | false | Skip TSS daemon reachability check |
+
+---
+
+## Validator Daemon (vald) Commands
+
+Axelar validators run a second process — the **vald** (validator daemon) — alongside the core node. Vald is responsible for observing external chains and signing threshold signatures via the TSS sidecar (`tofnd`).
+
+### `axelard vald-start`
+
+Starts the vald process. Must be run after the node is synced and the `tofnd` daemon is running.
+
+```bash
+axelard vald-start \
+  --validator-addr axelarvaloper1... \
+  --from broadcaster \
+  --tofnd-host localhost \
+  --tofnd-port 50051 \
+  --node tcp://localhost:26657 \
+  --chain-id axelar-dojo-1
+```
+
+<Warning>
+  `vald-start` will broadcast transactions to the chain on behalf of the broadcaster account. Ensure the account has sufficient AXL to pay gas fees before starting.
+</Warning>
+
+Key flags:
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--validator-addr` | — | Operator address (`axelarvaloper1…`) |
+| `--from` | — | Broadcaster key name or address |
+| `--tofnd-host` | `localhost` | TSS daemon host |
+| `--tofnd-port` | `50051` | TSS daemon port |
+| `--tofnd-dial-timeout` | `15s` | Dial timeout for TSS daemon |
+| `--gas-prices` | `0.007uaxl` | Gas price for broadcast transactions |
+| `--gas-adjustment` | `4` | Gas adjustment multiplier |
+
+### `axelard vald-sign`
+
+Signs a hash with the key corresponding to a given key ID for a specific validator. If `--pubkey` is omitted, the public key is retrieved from the node automatically.
+
+```bash
+axelard vald-sign [key-id] [validator-addr] [hash-to-sign] \
+  --node tcp://localhost:26657
+```
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--pubkey` | — | Validator public key (hex); looked up from node if not set |
+| `--node` | `tcp://localhost:26657` | RPC endpoint |
+
+---
+
+## Command Groups
+
+<CardGroup cols={2}>
+  <Card title="Node Setup & Operations" icon="server" href="/cli/init-start">
+    Initialize, start, and manage a running node — including `init`, `start`, `status`, `rollback`, `prune`, `comet`, and `snapshots`.
+  </Card>
+  <Card title="Key Management" icon="key" href="/cli/keys">
+    Create, import, export, and inspect cryptographic keys used for signing transactions and validator operations.
+  </Card>
+  <Card title="Genesis Configuration" icon="file-code" href="/cli/genesis">
+    Bootstrap a new chain: add genesis accounts, create validator gentxs, configure Axelar-specific parameters, and validate the genesis file.
+  </Card>
+  <Card title="Transactions" icon="arrow-right-arrow-left" href="/cli/overview">
+    Submit on-chain transactions via `axelard tx` — delegate, vote on governance proposals, interact with cross-chain modules, and more.
+  </Card>
+</CardGroup>
+
+---
+
+## Full Command Tree
+
+| Command | Description |
+|---|---|
+| `axelard init` | Initialize node configuration and genesis file |
+| `axelard start` | Run the full node with CometBFT |
+| `axelard status` | Query node status |
+| `axelard version` | Print binary version |
+| `axelard health-check` | Check node and TSS daemon health |
+| `axelard rollback` | Roll back chain state by one height |
+| `axelard prune` | Prune historical app state |
+| `axelard keys` | Manage cryptographic keys |
+| `axelard genesis` | Genesis-related subcommands |
+| `axelard comet` | CometBFT utility subcommands |
+| `axelard snapshots` | Manage local state snapshots |
+| `axelard vald-start` | Start the validator daemon |
+| `axelard vald-sign` | Sign a hash with a TSS key |
+| `axelard query` | Query chain state |
+| `axelard tx` | Broadcast transactions |
+| `axelard config` | Manage application configuration |
+| `axelard debug` | Debugging utilities |
+| `axelard export` | Export chain state to JSON |
+
+<Info>
+  Run `axelard [command] --help` at any level of the command tree to see all available subcommands and flags for that command.
+</Info>

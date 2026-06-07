@@ -1,0 +1,424 @@
+---
+title: "Nexus Transaction Commands for Axelar Core CLI"
+sidebarTitle: "Nexus Transactions"
+description: "Submit Nexus module transactions with axelard: manage chain maintainers, activate or deactivate chains, register asset fees, and retry failed messages."
+---
+
+The `axelard tx nexus` command group provides transaction subcommands for the Nexus module, which serves as the cross-chain routing hub of the Axelar network. Validators use these commands to register or deregister themselves as chain maintainers, governance can activate or deactivate supported chains, operators can configure per-asset fee structures, and any participant can retry a failed general message routing attempt.
+
+## Subcommands
+
+<Accordion title="register-chain-maintainer — Register as a chain maintainer">
+
+Registers the sender (a validator's proxy address) as a chain maintainer for one or more chains. Chain maintainers are responsible for observing and voting on events from the chains they maintain.
+
+**Syntax**
+
+```bash
+axelard tx nexus register-chain-maintainer [chain]... [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  One or more chain names to maintain (space-separated, e.g. `ethereum avalanche`).
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Proxy address of the validator registering as maintainer. Must be the registered proxy for the validator.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Axelar network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`). Use `"auto"` for automatic estimation.
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price in decimal format (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  Broadcasting mode: `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend: `os`, `file`, `kwallet`, `pass`, `test`, or `memory` (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Register for a single chain
+axelard tx nexus register-chain-maintainer ethereum \
+  --from myproxy \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl \
+  --broadcast-mode sync
+```
+
+```bash Register for multiple chains
+axelard tx nexus register-chain-maintainer ethereum avalanche polygon \
+  --from myproxy \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+<Note>
+  The `--from` address must be the validator's proxy address, not the validator's operator address. Register a proxy first using `axelard tx snapshot register-proxy`.
+</Note>
+
+</Accordion>
+
+<Accordion title="deregister-chain-maintainer — Remove chain maintainer registration">
+
+Deregisters the sender as a chain maintainer for one or more chains. After deregistration the validator will no longer be expected to vote on events from those chains.
+
+**Syntax**
+
+```bash
+axelard tx nexus deregister-chain-maintainer [chain]... [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  One or more chain names to stop maintaining (space-separated).
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Proxy address of the validator deregistering.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Deregister from a single chain
+axelard tx nexus deregister-chain-maintainer ethereum \
+  --from myproxy \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+
+```bash Deregister from multiple chains
+axelard tx nexus deregister-chain-maintainer ethereum avalanche \
+  --from myproxy \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+<Warning>
+  Deregistering reduces the validator set for the affected chains. Ensure that the remaining maintainers meet the minimum threshold before deregistering.
+</Warning>
+
+</Accordion>
+
+<Accordion title="activate-chain — Activate one or more chains">
+
+Activates one or more chains, enabling cross-chain transfers and message routing through Axelar for those chains. This is typically a governance-gated operation.
+
+**Syntax**
+
+```bash
+axelard tx nexus activate-chain [chain]... [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  One or more chain names to activate (space-separated, e.g. `ethereum`).
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Activate a single chain
+axelard tx nexus activate-chain ethereum \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+
+```bash Activate multiple chains
+axelard tx nexus activate-chain ethereum avalanche polygon \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+</Accordion>
+
+<Accordion title="deactivate-chain — Deactivate one or more chains">
+
+Deactivates one or more chains, halting cross-chain transfers and message routing for those chains. This may be used as an emergency circuit breaker or during scheduled maintenance.
+
+**Syntax**
+
+```bash
+axelard tx nexus deactivate-chain [chain]... [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  One or more chain names to deactivate (space-separated).
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Deactivate a chain
+axelard tx nexus deactivate-chain ethereum \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+<Warning>
+  Deactivating a chain immediately stops all pending transfers and message routing to that chain. In-flight messages may be lost or need manual recovery.
+</Warning>
+
+</Accordion>
+
+<Accordion title="register-asset-fee — Register fee parameters for an asset">
+
+Registers the fee rate, minimum fee, and maximum fee for a specific asset on a given chain. These parameters govern how much users are charged when transferring that asset through Axelar.
+
+**Syntax**
+
+```bash
+axelard tx nexus register-asset-fee [chain] [asset] [fee-rate] [min-fee] [max-fee] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  Name of the chain for which the fee applies (e.g. `ethereum`).
+</ParamField>
+
+<ParamField path="asset" type="string" required>
+  Asset denomination for which the fee is being set (e.g. `uaxl`, `uusdc`).
+</ParamField>
+
+<ParamField path="fee-rate" type="string" required>
+  Proportional fee expressed as a decimal fraction (e.g. `"0.001"` for 0.1%).
+</ParamField>
+
+<ParamField path="min-fee" type="string" required>
+  Minimum fee amount in the asset's base denomination (e.g. `"1000"` for 1000 uaxl).
+</ParamField>
+
+<ParamField path="max-fee" type="string" required>
+  Maximum fee amount in the asset's base denomination (e.g. `"1000000"` for 1 AXL).
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Set fees for AXL on Ethereum
+axelard tx nexus register-asset-fee \
+  ethereum uaxl "0.001" "1000" "1000000" \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+<Info>
+  Fee parameters take effect immediately once the transaction is confirmed. Existing in-flight transfers use the fee schedule that was active when they were initiated.
+</Info>
+
+</Accordion>
+
+<Accordion title="retry-failed-message — Retry routing a failed general message">
+
+Re-attempts routing of a general message that previously failed to reach its destination. This is useful when a transient error (such as a contract revert on the destination chain) caused the routing to fail.
+
+**Syntax**
+
+```bash
+axelard tx nexus retry-failed-message [message-id] [flags]
+```
+
+**Arguments**
+
+<ParamField path="message-id" type="string" required>
+  Unique identifier of the failed general message to retry (e.g. `ethereum-2|0xTxHash-1`).
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Retry a failed message
+axelard tx nexus retry-failed-message \
+  "ethereum-2|0xfailedTxHash-1" \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+<Tip>
+  Query the message status with `axelard q nexus message [message-id]` before retrying to confirm it is in a failed state and to understand the root cause.
+</Tip>
+
+</Accordion>
+
+## Common Flags
+
+All `axelard tx nexus` subcommands accept the following standard transaction flags:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--from` | — | Key name or address used to sign |
+| `--chain-id` | `axelar` | Network chain ID |
+| `--gas` | `200000` | Gas limit; use `auto` for estimation |
+| `--gas-adjustment` | `1` | Multiplier applied to simulated gas estimate |
+| `--gas-prices` | `0.007uaxl` | Gas price in decimal format |
+| `--broadcast-mode` | `sync` | Broadcasting mode (`sync` \| `async`) |
+| `--keyring-backend` | `file` | Keyring backend (`os` \| `file` \| `test` \| `memory`) |
+| `--node` | `tcp://localhost:26657` | CometBFT RPC endpoint |
+| `--yes` | `true` | Skip interactive confirmation prompt |

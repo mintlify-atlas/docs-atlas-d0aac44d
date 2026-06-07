@@ -1,0 +1,210 @@
+---
+title: "Software Upgrades: Planning, Execution & Rollback"
+sidebarTitle: "Upgrades"
+description: "End-to-end guide to submitting Axelar upgrade proposals, migrating genesis state, rolling back failed upgrades, and verifying release binaries with GPG."
+---
+
+Axelar follows the Cosmos SDK's governance-gated upgrade pattern: a software upgrade proposal is submitted, voted on by AXL token holders, and — if it passes — executed automatically at the specified block height. All validators must replace their binary before the upgrade height to avoid being halted. This page covers the full upgrade lifecycle from proposal to post-upgrade verification, including genesis migration and rollback procedures.
+
+## Upgrade Process Overview
+
+<Steps>
+  <Step title="Prepare the Release">
+    The Axelar team publishes a new release tag, signed binaries, and Docker images. Release notes indicate whether the upgrade is consensus-breaking and the recommended upgrade height.
+  </Step>
+  <Step title="Submit the Upgrade Proposal">
+    Any AXL holder submits a governance proposal containing a `MsgSoftwareUpgrade` targeting the new binary version and an agreed block height.
+  </Step>
+  <Step title="Deposit & Vote">
+    The community adds deposits and votes. On mainnet, at least 1 week of notice is required for consensus-breaking upgrades; on testnet, at least 2 business days.
+  </Step>
+  <Step title="Replace the Binary">
+    Validators download and verify the new `axelard` binary and place it where Cosmovisor or their process manager can find it before the upgrade height.
+  </Step>
+  <Step title="Upgrade Executes">
+    At the upgrade height the node halts, runs all registered migration handlers, and restarts with the new binary. The network resumes producing blocks once 2/3+ of voting power is online with the new binary.
+  </Step>
+  <Step title="Verify & Monitor">
+    Check block production resumes, confirm all modules migrated successfully, and monitor for any state anomalies in the hours after the upgrade.
+  </Step>
+</Steps>
+
+## Submitting an Upgrade Proposal
+
+Use `axelard tx upgrade software-upgrade` to submit a proposal via the governance module:
+
+```bash
+axelard tx upgrade software-upgrade [name] \
+  --upgrade-height [height] \
+  --upgrade-info [info-json] \
+  --title "Upgrade to v1.3.0" \
+  --summary "Cosmos SDK v0.50 upgrade with MsgUpdateParams support" \
+  --deposit 2000000uaxl \
+  --from <submitter> \
+  --chain-id axelar \
+  --gas auto \
+  --gas-adjustment 1.4 \
+  -y
+```
+
+| Flag | Description |
+|---|---|
+| `[name]` | Must match the upgrade name registered in `upgrades.go` (e.g. `v1.3`) |
+| `--upgrade-height` | Block height at which the upgrade executes |
+| `--upgrade-info` | JSON with binary download URLs, compatible with Cosmovisor |
+| `--deposit` | Initial deposit toward the governance minimum |
+| `--title` / `--summary` | Human-readable proposal metadata |
+
+### Upgrade Info JSON (Cosmovisor Format)
+
+```json
+{
+  "binaries": {
+    "linux/amd64": "https://github.com/axelarnetwork/axelar-core/releases/download/v1.3.0/axelard-linux-amd64-v1.3.0?checksum=sha256:abc123...",
+    "linux/arm64": "https://github.com/axelarnetwork/axelar-core/releases/download/v1.3.0/axelard-linux-arm64-v1.3.0?checksum=sha256:def456..."
+  }
+}
+```
+
+<Tip>
+  Pass the JSON as a single-line string or write it to a file and read it with `$(cat upgrade-info.json)`. Cosmovisor will automatically download and swap the binary if the info is formatted correctly.
+</Tip>
+
+## Canceling an Upgrade
+
+If a scheduled upgrade must be aborted before the upgrade height is reached, submit a cancel proposal:
+
+```bash
+axelard tx upgrade cancel-software-upgrade \
+  --title "Cancel v1.3.0 upgrade" \
+  --summary "Upgrade postponed due to discovered issue" \
+  --deposit 2000000uaxl \
+  --from <submitter> \
+  --chain-id axelar \
+  --gas auto \
+  -y
+```
+
+<Warning>
+  The cancel proposal must pass governance voting before the originally scheduled upgrade height. If the upgrade height is reached before the cancel vote passes, all nodes will halt and the cancel will have no effect.
+</Warning>
+
+## Querying the Upgrade Plan
+
+To check whether an upgrade is currently scheduled:
+
+```bash
+axelard query upgrade plan
+```
+
+Sample output when an upgrade is pending:
+
+```text
+height: "5000000"
+info: '{"binaries":{"linux/amd64":"https://..."}}'
+name: v1.3
+time: "0001-01-01T00:00:00Z"
+```
+
+If no upgrade is scheduled, the command returns an empty response.
+
+```bash
+# Also query which upgrade handlers have already run
+axelard query upgrade applied [upgrade-name]
+
+# List all module versions post-upgrade
+axelard query upgrade module-versions
+```
+
+## What Happens at Upgrade Height
+
+When the node reaches the scheduled upgrade height:
+
+1. The node **halts** and writes an `upgrade-info.json` file to disk.
+2. Cosmovisor (or the operator manually) replaces the `axelard` binary.
+3. On restart, `app.setUpgradeBehaviour` is called and runs the registered upgrade handler for the current version.
+4. The handler executes state migrations — for example, in v1.3.0 this included migrating Tendermint consensus parameters from `x/params` to the new `x/consensus` module and adding the `crisis` and `consensus` store keys.
+5. `mm.RunMigrations` runs all module migration scripts to update module consensus versions.
+6. The node resumes producing blocks.
+
+<Accordion title="v1.3.0 upgrade handler details">
+The v1.3.0 upgrade (`upgrades.go`) performs:
+
+- **Consensus params migration**: Moves Tendermint consensus parameters from the legacy `x/params` subspace (`baseapp.Paramspace`) to the dedicated `x/consensus` module keeper (`baseapp.MigrateParams`).
+- **New store keys**: Adds `crisis` and `consensus` to `StoreUpgrades.Added`.
+- **Module migrations**: All modules (auth, bank, staking, mint, distribution, slashing, gov, crisis, ibc, ibctransfer, wasm, and all Axelar modules) run their respective migration scripts via `mm.RunMigrations`.
+- **Key table setup**: Legacy param subspaces for all SDK and IBC modules are populated with key tables to allow the migration to read their values from state.
+</Accordion>
+
+## Recent Major Upgrades
+
+<CardGroup cols={2}>
+  <Card title="v1.3.0 — SDK v0.50" icon="arrow-up">
+    Upgraded to Cosmos SDK v0.50, IBC v8, and CosmWasm v0.54. Introduced `MsgUpdateParams` for all modules. Renamed `tendermint` commands to `comet`. Default broadcast mode changed from `block` to `sync`.
+  </Card>
+  <Card title="v1.2.0 — Custom Fee Burn" icon="fire">
+    Introduced custom fee allocation that retains the community pool portion and burns the remainder, replacing the default full-distribution behavior.
+  </Card>
+  <Card title="v1.1.0 — IBC Transfer Refactor" icon="arrows-rotate">
+    Moved coin locking to the nexus module for improved IBC transfer handling and refund flows. Added CosmWasm contract access to chain registration queries.
+  </Card>
+  <Card title="v1.1.2 — Security Fix" icon="shield">
+    Fixed decimal range validation (ASA-2024-010). Back-ported to v1.0.5.
+  </Card>
+</CardGroup>
+
+## Genesis Migration
+
+To migrate a `genesis.json` file from a previous chain version to a target version:
+
+```bash
+axelard genesis migrate [target-version] [genesis-file] \
+  --chain-id axelar \
+  --genesis-time 2024-01-01T00:00:00Z \
+  --output-document migrated-genesis.json
+```
+
+**Example:**
+
+```bash
+axelard genesis migrate v0.47 /path/to/old-genesis.json \
+  --chain-id axelar \
+  --output-document genesis.json
+```
+
+<Info>
+  Genesis migration is only needed when restarting a chain from an exported state file at a different software version. Running validators in live network upgrades do not run this command — the upgrade handler processes state automatically.
+</Info>
+
+## Rolling Back a Failed Upgrade
+
+If a node fails after upgrading due to an incorrect application state transition, use `rollback` to revert by one height:
+
+```bash
+axelard rollback [flags]
+```
+
+| Flag | Effect |
+|---|---|
+| _(none)_ | Roll back app state and CometBFT state to `n - 1`; block `n` remains and will be re-executed on restart |
+| `--hard` | Also removes the last block from the block store |
+
+<Warning>
+  Rollback is a recovery tool intended for individual node operator use. Rolling back does not affect other nodes or the network. If the network has already finalized the upgrade, a rollback will leave your node out of sync with the majority. Coordinate with the validator set before attempting a network-wide rollback.
+</Warning>
+
+## Versioning and Release Types
+
+Axelar follows [semantic versioning](https://semver.org/):
+
+| Release Type | Cadence | Notes |
+|---|---|---|
+| **Major** (`vX.0.0`) | Breaking changes | Requires coordinated network upgrade via governance |
+| **Minor** (`vX.Y.0`) | New features | Typically consensus-breaking; requires governance upgrade |
+| **Patch** (`vX.Y.Z`) | Bug fixes | Non-consensus-breaking; operators update independently |
+
+Major and minor releases are built from the `main` branch. The release workflow creates a `releases/<major>.<minor>.x` branch automatically. Patch releases cherry-pick changes into the corresponding release branch.
+
+<Tip>
+  Always check the release notes on the [Axelar Core releases page](https://github.com/axelarnetwork/axelar-core/releases) to determine whether a release is consensus-breaking and whether a governance proposal is required.
+</Tip>

@@ -1,0 +1,256 @@
+---
+title: "Axelarnet Query Commands — Axelar IBC Module CLI"
+sidebarTitle: "Axelarnet Queries"
+description: "Reference for all axelard query axelarnet subcommands: IBC path lookups, chain reverse lookup, pending transfer counts, and axelarnet module parameters."
+---
+
+The `axelard query axelarnet` command group provides read-only access to Axelar's Axelarnet module state. The Axelarnet module manages Axelar's native IBC integrations with Cosmos chains — tracking the IBC channel paths used to route cross-chain transfers and monitoring pending outbound IBC transfers. Use these subcommands to look up IBC path registrations and inspect module parameters without submitting any transaction.
+
+<Info>
+  Most Axelarnet query subcommands accept `--node`, `--grpc-addr`, `--height`, and `--output` flags. Note that `ibc-transfer-count` only supports the standard inherited flags and does not accept gRPC or node options.
+</Info>
+
+## Global Flags
+
+The following flags are inherited by every `axelard query axelarnet` subcommand.
+
+<ParamField path="--home" type="string">
+  Directory for config and data. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+<ParamField path="--log_format" type="string">
+  Logging format: `json` or `plain`. Defaults to `plain`.
+</ParamField>
+
+<ParamField path="--log_level" type="string">
+  Logging level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, or `panic`. Defaults to `info`.
+</ParamField>
+
+<ParamField path="--output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+<ParamField path="--trace" type="boolean">
+  Print full stack trace on errors.
+</ParamField>
+
+---
+
+## Subcommands
+
+<Accordion title="ibc-path — Get registered IBC path for a Cosmos chain">
+
+Returns the registered IBC path for the given Cosmos chain. The IBC path identifies the channel through which cross-chain transfers are routed between Axelar and that chain. This is used by Axelar to correctly forward IBC packets.
+
+**Syntax**
+
+```bash
+axelard query axelarnet ibc-path [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the Cosmos chain to look up the IBC path for (e.g., `osmosis`, `cosmoshub`, `juno`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels. If not set, the server must use TLS.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height. May error if the node is pruning state.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query axelarnet ibc-path osmosis
+axelard query axelarnet ibc-path cosmoshub --output json
+axelard query axelarnet ibc-path juno --node tcp://my-node:26657
+```
+
+**Example output**
+
+```
+ibcPath: "transfer/channel-3"
+```
+
+<Tip>
+  The IBC path format is `transfer/channel-N` where `N` is the channel number on the Axelar side of the IBC connection. Use `chain-by-ibc-path` to perform the reverse lookup from path to chain name.
+</Tip>
+
+</Accordion>
+
+<Accordion title="chain-by-ibc-path — Reverse lookup chain by IBC path">
+
+Returns the Cosmos chain name registered for the given IBC path. This is the reverse of `ibc-path` — given a channel path such as `transfer/channel-3`, it tells you which Cosmos chain that channel corresponds to.
+
+**Syntax**
+
+```bash
+axelard query axelarnet chain-by-ibc-path [ibc-path] [flags]
+```
+
+**Arguments**
+
+<ParamField path="ibc-path" type="string" required>
+  The IBC path to look up, in the format `transfer/channel-N` (e.g., `transfer/channel-3`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query axelarnet chain-by-ibc-path transfer/channel-3
+axelard query axelarnet chain-by-ibc-path transfer/channel-0 --output json
+```
+
+**Example output**
+
+```
+chain:
+  name: "osmosis"
+  supports_foreign_assets: true
+  key_type: KEY_TYPE_NONE
+  module: axelarnet
+```
+
+<Note>
+  If no chain is registered for the given IBC path, the command returns an error. Ensure the path is in the exact format `transfer/channel-N` with no trailing characters.
+</Note>
+
+</Accordion>
+
+<Accordion title="ibc-transfer-count — Get pending IBC transfer count per chain">
+
+Returns the number of pending (in-flight) outbound IBC transfers per Cosmos chain. This is useful for monitoring Axelar's IBC transfer queue and diagnosing delays in cross-chain deliveries.
+
+**Syntax**
+
+```bash
+axelard query axelarnet ibc-transfer-count [flags]
+```
+
+**Flags**
+
+<ParamField path="-h / --help" type="boolean">
+  Display help for this command.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query axelarnet ibc-transfer-count
+axelard query axelarnet ibc-transfer-count --output json
+```
+
+**Example output**
+
+```
+counts:
+- chain: "osmosis"
+  count: 5
+- chain: "cosmoshub"
+  count: 2
+- chain: "juno"
+  count: 0
+```
+
+<Note>
+  A consistently high pending transfer count for a specific chain may indicate an IBC channel is congested, the relayer is down, or the channel has been closed. Cross-reference with the relevant chain's IBC monitoring tools for diagnosis.
+</Note>
+
+</Accordion>
+
+<Accordion title="params — Get Axelarnet module parameters">
+
+Returns the on-chain governance parameters for the Axelarnet module. These parameters control IBC transfer behaviour, fee collection, and other module-level policies.
+
+**Syntax**
+
+```bash
+axelard query axelarnet params [flags]
+```
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query axelarnet params
+axelard query axelarnet params --output json
+```
+
+**Example output**
+
+```
+params:
+  route_timeout_window: 100
+  transfer_limit: 50
+  end_blocker_limit: 50
+  call_contracts_proposal_min_deposits:
+  - denom: "uaxl"
+    amount: "100000000"
+```
+
+<Tip>
+  The `route_timeout_window` parameter (in blocks) determines how long Axelar waits before timing out a pending IBC packet. If transfers are frequently timing out, governance can increase this value via a parameter change proposal.
+</Tip>
+
+</Accordion>

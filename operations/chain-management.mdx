@@ -1,0 +1,298 @@
+---
+title: "Chain Management: EVM, IBC & Asset Operations"
+sidebarTitle: "Chain Management"
+description: "Step-by-step reference for adding EVM and Cosmos chains to Axelar, registering assets, managing chain maintainers, and configuring cross-chain fees."
+---
+
+Axelar connects EVM chains, IBC-enabled Cosmos chains, and the Axelar network itself into a unified interoperability layer. Adding a new chain requires registering it in the nexus module, deploying or pointing to gateway contracts on the EVM side, establishing IBC paths for Cosmos chains, registering assets and fees, and finally activating the chain for live traffic. This page walks through each step and the CLI commands that drive them.
+
+## EVM Chain Management
+
+### Adding a New EVM Chain
+
+To register a new EVM chain with the Axelar network, provide its name and a path to a JSON configuration file containing the chain's EVM parameters:
+
+```bash
+axelard tx evm add-chain [name] [path/to/chain-config.json] \
+  --from <controller-or-governance-address> \
+  --chain-id axelar \
+  --gas auto \
+  --gas-adjustment 1.4 \
+  -y
+```
+
+The chain config JSON describes key requirements and EVM module parameters for the new chain, including the EVM chain ID, confirmation height, and voting periods.
+
+<Note>
+  The `add-chain` command must be sent from an account with controller or governance-key privileges. New chains are inactive by default and must be explicitly activated after registration.
+</Note>
+
+### Setting the EVM Gateway
+
+After a chain is registered and the gateway smart contract is deployed on the external EVM network, point Axelar to the contract address:
+
+```bash
+axelard tx evm set-gateway [chain] [gateway-address] \
+  --from <governance-key-address> \
+  --chain-id axelar \
+  --gas auto \
+  -y
+```
+
+**Example:**
+
+```bash
+axelard tx evm set-gateway Ethereum 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9 \
+  --from governance \
+  --chain-id axelar \
+  --gas auto \
+  -y
+```
+
+The current gateway contract version tracked by axelar-core is defined in `contract-version.json` (currently `gateway: v6.1.0`). Gateway contract source is maintained in the [axelar-cgp-solidity](https://github.com/axelarnetwork/axelar-cgp-solidity) repository.
+
+### Deploying ERC-20 Tokens
+
+To enable a token to be transferred through an EVM chain's gateway, create a deploy-token command:
+
+```bash
+axelard tx evm create-deploy-token \
+  [evm-chain] [origin-chain] [origin-asset] \
+  [token-name] [symbol] [decimals] [capacity] [mint-limit] \
+  --from <address> \
+  --chain-id axelar \
+  --gas auto \
+  -y
+```
+
+For tokens that already have an existing ERC-20 contract, pass the contract address with `--address <0x...>`.
+
+### Confirming EVM Operations
+
+After submitting EVM transactions on the external chain, validators must confirm them on Axelar. The vald daemon handles this automatically, but the following commands allow manual confirmation:
+
+<Tabs>
+  <Tab title="Confirm ERC-20 Token">
+    ```bash
+    axelard tx evm confirm-erc20-token \
+      [chain] [origin-chain] [origin-asset] [txID] \
+      --from <validator-proxy> \
+      --chain-id axelar \
+      -y
+    ```
+    Confirms that a token was deployed on the EVM chain at the given transaction ID.
+  </Tab>
+  <Tab title="Confirm Gateway Txs">
+    ```bash
+    axelard tx evm confirm-gateway-txs \
+      [chain] [txID]... \
+      --from <validator-proxy> \
+      --chain-id axelar \
+      -y
+    ```
+    Confirms one or more transactions processed by the gateway contract.
+  </Tab>
+  <Tab title="Confirm Transfer Operatorship">
+    ```bash
+    axelard tx evm confirm-transfer-operatorship \
+      [chain] [txID] \
+      --from <validator-proxy> \
+      --chain-id axelar \
+      -y
+    ```
+    Confirms that gateway operatorship was transferred at the given transaction.
+  </Tab>
+</Tabs>
+
+## Cosmos / IBC Chain Management
+
+### Adding a Cosmos-Based Chain
+
+To register a Cosmos chain connected via IBC:
+
+```bash
+axelard tx axelarnet add-cosmos-based-chain \
+  [name] [address-prefix] [ibc-path] [native-asset]... \
+  --from <governance-or-controller> \
+  --chain-id axelar \
+  --gas auto \
+  -y
+```
+
+| Argument | Description |
+|---|---|
+| `name` | Human-readable chain name (e.g. `osmosis`) |
+| `address-prefix` | Bech32 address prefix (e.g. `osmo`) |
+| `ibc-path` | IBC transfer channel path (e.g. `transfer/channel-4`) |
+| `native-asset` | One or more native asset denoms on this chain |
+
+**Example:**
+
+```bash
+axelard tx axelarnet add-cosmos-based-chain \
+  osmosis osmo transfer/channel-4 uosmo \
+  --from controller \
+  --chain-id axelar \
+  --gas auto \
+  -y
+```
+
+### Registering Assets on a Cosmos Chain
+
+After adding the chain, register each transferable asset:
+
+```bash
+axelard tx axelarnet register-asset [chain] [denom] \
+  --from <governance-or-controller> \
+  --chain-id axelar \
+  --gas auto \
+  -y
+```
+
+Pass `--is-native-asset` for assets that originate natively on the Cosmos chain (rather than being wrapped from another network).
+
+## Chain Maintainers
+
+Chain maintainers are validators that monitor and confirm activity on a specific external chain. They earn inflation rewards for their work and can be registered or deregistered at any time.
+
+### Registering as a Chain Maintainer
+
+```bash
+axelard tx nexus register-chain-maintainer [chain]... \
+  --from <validator-proxy> \
+  --chain-id axelar \
+  --gas auto \
+  -y
+```
+
+Validators can register for multiple chains in a single transaction.
+
+### Deregistering as a Chain Maintainer
+
+```bash
+axelard tx nexus deregister-chain-maintainer [chain]... \
+  --from <validator-proxy> \
+  --chain-id axelar \
+  --gas auto \
+  -y
+```
+
+<Info>
+  External chain voting inflation rewards are distributed only to registered chain maintainers. Ensure your validator's vald process is correctly configured and online before registering.
+</Info>
+
+## Activating and Deactivating Chains
+
+A chain must be activated before it accepts cross-chain transfers. Activation and deactivation require a controller or governance-key account:
+
+<Steps>
+  <Step title="Register the chain">
+    Add the EVM or Cosmos chain and set its gateway / IBC path.
+  </Step>
+  <Step title="Register assets and fees">
+    Ensure all assets the chain will support are registered and fee parameters are set.
+  </Step>
+  <Step title="Activate the chain">
+    ```bash
+    axelard tx nexus activate-chain [chain]... \
+      --from <controller-or-governance> \
+      --chain-id axelar \
+      --gas auto \
+      -y
+    ```
+  </Step>
+  <Step title="Verify chain status">
+    ```bash
+    axelard query nexus chain-info [chain]
+    ```
+    Confirm `activated: true` in the output.
+  </Step>
+</Steps>
+
+To halt a chain for maintenance or in response to a security incident:
+
+```bash
+axelard tx nexus deactivate-chain [chain]... \
+  --from <controller-or-governance> \
+  --chain-id axelar \
+  --gas auto \
+  -y
+```
+
+<Warning>
+  Deactivating a chain stops all new cross-chain transfers for that chain. In-flight transfers that have already been confirmed will continue to be processed.
+</Warning>
+
+## Asset Fee Configuration
+
+Cross-chain transfer fees are configured per asset per chain. The fee model uses a rate plus minimum and maximum bounds:
+
+```bash
+axelard tx nexus register-asset-fee \
+  [chain] [asset] [fee-rate] [min-fee] [max-fee] \
+  --from <governance-or-controller> \
+  --chain-id axelar \
+  --gas auto \
+  -y
+```
+
+| Parameter | Description |
+|---|---|
+| `chain` | The chain where the fee applies |
+| `asset` | Asset denom (e.g. `uaxl`, `uusdc`) |
+| `fee-rate` | Fractional rate (e.g. `0.001` for 0.1%) |
+| `min-fee` | Minimum fee in base units |
+| `max-fee` | Maximum fee cap in base units |
+
+**Example:**
+
+```bash
+axelard tx nexus register-asset-fee \
+  Ethereum uusdc 0.001 1000000 10000000000 \
+  --from controller \
+  --chain-id axelar \
+  -y
+```
+
+## Genesis Chain Setup
+
+For operators bootstrapping a new network, chains and their contract parameters can be embedded directly in `genesis.json`:
+
+<Accordion title="Add an EVM chain to genesis">
+```bash
+# Add the EVM chain entry
+axelard add-genesis-evm-chain [name] --home $HOME/.axelar
+
+# Configure chain parameters (confirmation height, chain ID, etc.)
+axelard set-genesis-chain-params evm [chain] \
+  --evm-chain-id 1 \
+  --evm-network-name mainnet \
+  --confirmation-height 7 \
+  --revote-locking-period 75 \
+  --home $HOME/.axelar
+
+# Set gateway and burner contract ABIs
+axelard set-genesis-evm-contracts \
+  --token path/to/token-abi.json \
+  --burnable path/to/burner-abi.json \
+  --home $HOME/.axelar
+```
+</Accordion>
+
+<Note>
+  The `set-genesis-chain-params` and `set-genesis-evm-contracts` commands require the contract bytecode artifacts from [axelar-cgp-solidity](https://github.com/axelarnetwork/axelar-cgp-solidity). Download the matching version from the releases page and unzip under `contract-artifacts/` before running `make generate`.
+</Note>
+
+## Key Rotation
+
+After a multisig key generation ceremony completes for a chain, rotate the active key:
+
+```bash
+axelard tx multisig rotate [chain] [keyID] \
+  --from <governance-key-address> \
+  --chain-id axelar \
+  --gas auto \
+  -y
+```
+
+This updates the chain's active multisig key. The corresponding gateway contract must then confirm the transfer of operatorship via `axelard tx evm confirm-transfer-operatorship`.

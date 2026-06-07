@@ -1,0 +1,151 @@
+---
+title: "Permission Module: Governance Key and Controller Roles"
+sidebarTitle: "Permission"
+description: "The Permission module manages Axelar's governance key — a threshold multisig that authorizes privileged operations — and a set of controller accounts with elevated network access."
+---
+
+The Permission module is Axelar's access-control layer for privileged operations that should not be executable by ordinary accounts. It stores a **governance key** — a Cosmos SDK k-of-n multisig public key — whose signatures authorize sensitive transactions like chain registration, token deployment, and key rotation. It also maintains a list of **controller** accounts that can send certain privileged transactions without needing the full governance multisig. Together these two mechanisms give the Axelar core team and community a graduated trust model for network management.
+
+<CardGroup cols={2}>
+  <Card title="Governance Key" icon="key">
+    A k-of-n multisig key stored on-chain. Transactions that require governance authorization must be signed by at least k of the n registered public keys.
+  </Card>
+  <Card title="Controller Accounts" icon="user-check">
+    Individual accounts granted the `ROLE_CHAIN_MANAGEMENT` role, allowing them to submit chain and asset management transactions.
+  </Card>
+  <Card title="Key Rotation" icon="rotate">
+    The governance key itself can be updated through `update-governance-key`, enabling key rotation without a full chain upgrade.
+  </Card>
+  <Card title="Role Validation" icon="shield-check">
+    Every permission-gated message is validated against the module's account registry before execution proceeds.
+  </Card>
+</CardGroup>
+
+## Key Concepts
+
+### GovernanceKey
+
+The governance key is a `LegacyAminoPubKey` (Cosmos SDK k-of-n multisig) stored in the Permission module's state:
+
+```go
+func NewUpdateGovernanceKeyRequest(
+    sender sdk.AccAddress,
+    threshold int,
+    pubKeys ...cryptotypes.PubKey,
+) *UpdateGovernanceKeyRequest {
+    govKey := multisig.NewLegacyAminoPubKey(threshold, pubKeys)
+    return &UpdateGovernanceKeyRequest{
+        Sender:        sender.String(),
+        GovernanceKey: *govKey,
+    }
+}
+```
+
+The threshold `k` must be at least 1 and must not exceed the number of supplied public keys `n`. Every message that checks for governance authorization verifies that the transaction was signed by at least `k` of the registered keys.
+
+### GovAccount
+
+A `GovAccount` pairs a Cosmos address with an assigned `Role`:
+
+```go
+func NewGovAccount(addr sdk.AccAddress, role exported.Role) GovAccount {
+    return GovAccount{Address: addr, Role: role}
+}
+```
+
+The only supported privileged role is `ROLE_CHAIN_MANAGEMENT`, which grants permission to register chains, assets, and perform other administrative actions without requiring the full governance multisig signature.
+
+### Controller vs Governance Key
+
+<Tabs>
+  <Tab title="Controller Accounts">
+    - Individual Bech32 addresses registered by the governance key holder.
+    - Assigned the `ROLE_CHAIN_MANAGEMENT` role.
+    - Can submit privileged transactions unilaterally (single signature).
+    - Suited for operational tasks like registering new Cosmos chains or assets.
+  </Tab>
+  <Tab title="Governance Key">
+    - A k-of-n multisig key stored on-chain.
+    - Required for the most sensitive actions, including updating the governance key itself.
+    - Provides cryptographic accountability across multiple key holders.
+    - Suited for one-time or infrequent high-stakes operations.
+  </Tab>
+</Tabs>
+
+## Registering a Controller
+
+The governance key must sign the `register-controller` transaction. Once registered, the controller can act on behalf of governance for chain management:
+
+```bash
+axelard tx permission register-controller [controller-address] \
+  --from <governance-multisig-key> \
+  --chain-id axelar-dojo-1
+```
+
+<Warning>
+This transaction must be submitted with a multisig signature from the current governance key. Attempting to sign with a single key that does not match the governance key will be rejected.
+</Warning>
+
+## Deregistering a Controller
+
+Remove a controller account when it is no longer needed or if the key is compromised:
+
+```bash
+axelard tx permission deregister-controller [controller-address] \
+  --from <governance-multisig-key> \
+  --chain-id axelar-dojo-1
+```
+
+## Updating the Governance Key
+
+Replace the current governance key with a new k-of-n multisig. The existing key must sign this transaction:
+
+```bash
+axelard tx permission update-governance-key \
+  --threshold 3 \
+  --pubkeys '{"@type":"/cosmos.crypto.secp256k1.PubKey","key":"..."},{"@type":"..."},...' \
+  --from <current-governance-multisig-key> \
+  --chain-id axelar-dojo-1
+```
+
+<Note>
+The `UpdateGovernanceKeyRequest` validates that `threshold > 0` and `len(pubKeys) >= threshold`. Key rotation takes effect immediately — ensure the new key holders are ready to sign before submitting.
+</Note>
+
+## Module Parameters
+
+The Permission module currently has no tunable on-chain parameters. All configuration is managed through governance key and controller account registration.
+
+## CLI Reference
+
+### Query Commands
+
+```bash
+# Retrieve the current governance key
+axelard query permission governance-key
+
+# Show permission module parameters
+axelard query permission params
+```
+
+### Transaction Commands
+
+```bash
+# Register a controller account (requires governance multisig)
+axelard tx permission register-controller [controller-address] \
+  --from <governance-multisig-key>
+
+# Deregister a controller account (requires governance multisig)
+axelard tx permission deregister-controller [controller-address] \
+  --from <governance-multisig-key>
+
+# Update the governance key (requires current governance multisig)
+axelard tx permission update-governance-key \
+  --threshold 3 \
+  --pubkeys '[{"@type":"/cosmos.crypto.secp256k1.PubKey","key":"A..."}]' \
+  --from <current-governance-multisig-key>
+```
+
+<Tip>
+To construct a valid multisig signature for governance transactions, use `axelard tx sign --multisig [governance-address]` with each key holder, then `axelard tx multisign` to combine the partial signatures before broadcasting.
+</Tip>

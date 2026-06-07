@@ -1,0 +1,147 @@
+---
+title: "Snapshot Module: Validator Proxy and Participation Tracking"
+sidebarTitle: "Snapshot"
+description: "The Snapshot module tracks validator participation in Axelar by managing proxy account registrations that allow vald operators to broadcast transactions on behalf of their validators."
+---
+
+The Snapshot module bridges Axelar's validator set with the operational demands of cross-chain work. Because validators must submit many transactions per block — event confirmations, vote submissions, signature shares — they register a **proxy account** through this module. The proxy acts on the validator's behalf, allowing automated vald processes to broadcast transactions without exposing the validator's main key. The module also tracks which proxies are active, enabling the rest of the system to identify the operator behind any proxy address.
+
+<CardGroup cols={2}>
+  <Card title="Proxy Registration" icon="user-shield">
+    Validators register a separate proxy address that the vald daemon uses to broadcast operational transactions.
+  </Card>
+  <Card title="Operator Lookup" icon="magnifying-glass">
+    Other modules (e.g., nexus, multisig) look up the validator operator behind a proxy address to attribute votes and signatures.
+  </Card>
+  <Card title="Proxy Status" icon="toggle-on">
+    Proxies can be marked active or inactive. Only active proxies can submit transactions that require operator authorization.
+  </Card>
+  <Card title="Balance Enforcement" icon="wallet">
+    The `MinProxyBalance` parameter ensures proxy accounts hold enough funds to cover transaction fees, preventing operational failures.
+  </Card>
+</CardGroup>
+
+## Key Concepts
+
+### ProxiedValidator
+
+A `ProxiedValidator` links a validator address to a proxy account:
+
+```go
+func NewProxiedValidator(validator sdk.ValAddress, proxy sdk.AccAddress, active bool) ProxiedValidator {
+    return ProxiedValidator{
+        Validator: validator,
+        Proxy:     proxy,
+        Active:    active,
+    }
+}
+
+func (m ProxiedValidator) Validate() error {
+    if err := sdk.VerifyAddressFormat(m.Validator); err != nil {
+        return errorsmod.Wrap(err, "invalid validator")
+    }
+    if err := sdk.VerifyAddressFormat(m.Proxy); err != nil {
+        return errorsmod.Wrap(err, "invalid proxy")
+    }
+    if m.Validator.Equals(m.Proxy) {
+        return errors.New("validator cannot be the same as proxy")
+    }
+    return nil
+}
+```
+
+The `Active` flag is `true` after registration and `false` after the validator calls `deactivate-proxy`.
+
+### Snapshot
+
+A snapshot is a point-in-time capture of the active validator set and their voting powers, used by the Multisig module to determine keygen and signing participants. Snapshots are created on-demand (e.g., at the start of a keygen session) and stored by the Snapshot keeper.
+
+### Participant
+
+Within a snapshot, a `Participant` represents one validator with their associated voting weight at the time the snapshot was taken.
+
+## Proxy Registration
+
+Validators must register a proxy before they can participate in any chain-maintenance or signing duties. The proxy address is typically a hot wallet controlled by the `vald` process:
+
+```bash
+# Register a proxy account for the validator sending this transaction
+axelard tx snapshot register-proxy [proxy-address] \
+  --from <validator-operator-key> \
+  --chain-id axelar-dojo-1
+```
+
+<Warning>
+The proxy address must be different from the validator's operator address. Attempting to register the same address as both operator and proxy will fail validation.
+</Warning>
+
+## Deactivating a Proxy
+
+When rotating proxy keys or temporarily suspending vald operations, deactivate the current proxy:
+
+```bash
+axelard tx snapshot deactivate-proxy \
+  --from <validator-operator-key> \
+  --chain-id axelar-dojo-1
+```
+
+<Note>
+After calling `deactivate-proxy`, the validator will not be able to participate in cross-chain duties until a new proxy is registered and activated. Ensure continuity before deactivating in production.
+</Note>
+
+## Sending Tokens to Proxies
+
+For operational convenience, send tokens to multiple proxy addresses in a single transaction:
+
+```bash
+axelard tx snapshot send-tokens \
+  --from <funder-key> \
+  --recipients axelar1proxy1...,axelar1proxy2... \
+  --amounts 1000000uaxl,1000000uaxl \
+  --chain-id axelar-dojo-1
+```
+
+## Module Parameters
+
+<Accordion title="Snapshot Parameters">
+  <ParamField path="MinProxyBalance" type="int64" required>
+    Minimum token balance (in `uaxl`) that a proxy account must maintain to be considered operational. Default: `5,000,000 uaxl` (5 AXL). If a proxy's balance falls below this threshold, it may be treated as inactive by the broader system.
+  </ParamField>
+</Accordion>
+
+## CLI Reference
+
+### Query Commands
+
+```bash
+# Look up the operator (validator) address for a given proxy address
+axelard query snapshot operator [proxy-address]
+
+# Look up the proxy address and its status for a given operator address
+axelard query snapshot proxy [operator-address]
+
+# Show snapshot module parameters
+axelard query snapshot params
+```
+
+### Transaction Commands
+
+```bash
+# Register a proxy address
+axelard tx snapshot register-proxy [proxy-address] \
+  --from <validator-operator-key>
+
+# Deactivate the current proxy
+axelard tx snapshot deactivate-proxy \
+  --from <validator-operator-key>
+
+# Send tokens to proxy accounts
+axelard tx snapshot send-tokens \
+  --recipients axelar1abc...,axelar1def... \
+  --amounts 1000000uaxl,1000000uaxl \
+  --from <funder-key>
+```
+
+<Tip>
+After registering a proxy, verify the linkage with `axelard query snapshot proxy [operator-address]` and confirm the status shows `active: true` before starting vald.
+</Tip>

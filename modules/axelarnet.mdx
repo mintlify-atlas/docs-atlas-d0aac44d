@@ -1,0 +1,214 @@
+---
+title: "Axelarnet Module: IBC Connectivity for Cosmos Chains"
+sidebarTitle: "Axelarnet"
+description: "The Axelarnet module bridges Cosmos IBC chains into Axelar, managing IBC paths, asset registration, transfer routing, IBC hooks, and fee collection for Cosmos-based networks."
+---
+
+The Axelarnet module is Axelar's gateway for Cosmos SDK chains that communicate over IBC. It maintains a registry of IBC-connected chains, maps each chain to an IBC channel path, routes incoming and outgoing transfers via `ibc-transfer`, and supports IBC hook-based general message passing. Any Cosmos chain that shares an IBC channel with Axelar and is registered in this module can send and receive assets through the Axelar network.
+
+<CardGroup cols={2}>
+  <Card title="Cosmos Chain Registry" icon="database">
+    Registers Cosmos-based chains with their address prefix, native asset denom, and IBC channel path.
+  </Card>
+  <Card title="Asset Registration" icon="coins">
+    Links IBC denominations to Axelar's internal asset registry so they can be transferred cross-chain.
+  </Card>
+  <Card title="IBC Transfer Routing" icon="route">
+    Routes pending IBC transfers to registered channels and retries failed transfers using the correct IBC path.
+  </Card>
+  <Card title="General Message Routing" icon="message">
+    Handles IBC hook payloads that encode GMP calls, routing approved messages to their destination chains.
+  </Card>
+</CardGroup>
+
+## Key Concepts
+
+### CosmosChain
+
+A `CosmosChain` entry records a registered Cosmos-based chain with:
+
+- **Name** — the Axelar chain name (e.g., `osmosis`, `cosmoshub`)
+- **IBCPath** — the IBC channel path (e.g., `transfer/channel-0`)
+- **AddrPrefix** — the Bech32 prefix for addresses on that chain (e.g., `osmo`)
+- **NativeAssets** — denoms native to that chain
+
+### IBC Path
+
+The IBC path binds a Cosmos chain name to an `transfer/channel-N` string. Axelar uses this to dispatch outbound IBC transfers on the correct channel. Only one path can be registered per chain at a time.
+
+### IBCTransfer
+
+Pending IBC transfers are queued by the module and flushed each block (up to `EndBlockerLimit`). If a transfer fails, it enters a retry queue accessible via `retry-ibc-transfer`.
+
+### IBC Hooks
+
+When an IBC transfer arrives at Axelar with a memo field containing a valid GMP payload, the axelarnet module parses it and creates a `GeneralMessage` in Nexus, which is then routed to the destination chain.
+
+## Adding a Cosmos Chain
+
+Register a new Cosmos chain with its IBC path and address prefix:
+
+```bash
+axelard tx axelarnet add-cosmos-based-chain \
+  --name osmosis \
+  --chain-id axelar-dojo-1 \
+  --native-assets uosmo \
+  --ibc-path transfer/channel-0 \
+  --addr-prefix osmo \
+  --from <gov-key>
+```
+
+<Note>
+The `add-cosmos-based-chain` transaction is restricted to governance-authorized accounts (controllers or governance proposals). The chain must not already be registered under the same name.
+</Note>
+
+## Asset Registration
+
+After adding a chain, register the assets that can be transferred to and from it:
+
+```bash
+# Register uosmo as a transferable asset on the osmosis chain
+axelard tx axelarnet register-asset osmosis uosmo \
+  --is-native-asset=true \
+  --from <gov-key> \
+  --chain-id axelar-dojo-1
+
+# Register an IBC-wrapped denom that originates on another chain
+axelard tx axelarnet register-asset osmosis \
+  ibc/27394FB092D2ECCD56123C74F36E4C1F926001CEADA9CA97EA622B25F41E5EB2 \
+  --from <gov-key> \
+  --chain-id axelar-dojo-1
+```
+
+## Transfer Routing
+
+Outbound transfers to Cosmos chains are executed in the end blocker. You can trigger an immediate routing attempt:
+
+```bash
+# Route all pending IBC transfers to their target chains
+axelard tx axelarnet route-ibc-transfers \
+  --from <any-key> \
+  --chain-id axelar-dojo-1
+
+# Execute pending transfers back to the Axelar chain itself
+axelard tx axelarnet execute-pending-transfers \
+  --from <any-key> \
+  --chain-id axelar-dojo-1
+```
+
+### Retrying Failed Transfers
+
+If an IBC transfer times out or fails due to a channel issue, retry it by sequence number:
+
+```bash
+axelard tx axelarnet retry-ibc-transfer \
+  --chain osmosis \
+  --sequence 42 \
+  --from <any-key> \
+  --chain-id axelar-dojo-1
+```
+
+## General Message Routing
+
+Route an approved GMP message to its destination chain. This is called by vald after Nexus marks a message as approved:
+
+```bash
+axelard tx axelarnet route-message [message-id] \
+  --from <proxy-key> \
+  --chain-id axelar-dojo-1
+```
+
+## Fee Collector Registration
+
+Register a Bech32 account to collect transfer fees on the Axelar chain:
+
+```bash
+axelard tx axelarnet register-fee-collector \
+  --fee-collector axelar1... \
+  --from <gov-key> \
+  --chain-id axelar-dojo-1
+```
+
+## Module Parameters
+
+<Accordion title="Axelarnet Parameters">
+  <ParamField path="RouteTimeoutWindow" type="uint64" required>
+    Number of blocks within which an IBC transfer must be relayed before it is considered timed out and eligible for retry. Default: `85,000` blocks (17,000 × 5 for 1s block time).
+  </ParamField>
+
+  <ParamField path="TransferLimit" type="uint64" required>
+    Maximum number of IBC transfers dispatched per block. Default: `20`.
+  </ParamField>
+
+  <ParamField path="EndBlockerLimit" type="uint64" required>
+    Maximum number of operations processed by the end blocker per block. Default: `50`.
+  </ParamField>
+
+  <ParamField path="CallContractsProposalMinDeposits" type="CallContractProposalMinDeposits">
+    Minimum governance deposit amounts required for call-contract proposals, keyed by destination chain and contract address.
+  </ParamField>
+</Accordion>
+
+<Info>
+The `RouteTimeoutWindow` was updated from 17,000 to 85,000 blocks in v1.3.0 to accommodate the switch to 1-second block times. Cosmos chain relayers should ensure their relay windows are consistent with this setting.
+</Info>
+
+## CLI Reference
+
+### Query Commands
+
+```bash
+# Get the IBC path registered for a Cosmos chain
+axelard query axelarnet ibc-path osmosis
+
+# Look up a chain name by its IBC path
+axelard query axelarnet chain-by-ibc-path transfer/channel-0
+
+# Count pending IBC transfers per chain
+axelard query axelarnet ibc-transfer-count
+
+# Show axelarnet module parameters
+axelard query axelarnet params
+```
+
+### Transaction Commands
+
+```bash
+# Add a Cosmos-based chain
+axelard tx axelarnet add-cosmos-based-chain \
+  --name osmosis \
+  --native-assets uosmo \
+  --ibc-path transfer/channel-0 \
+  --addr-prefix osmo \
+  --from <gov-key>
+
+# Register an asset on a Cosmos chain
+axelard tx axelarnet register-asset osmosis uosmo \
+  --from <gov-key>
+
+# Register a fee-collector account
+axelard tx axelarnet register-fee-collector \
+  --fee-collector axelar1... \
+  --from <gov-key>
+
+# Route pending IBC transfers
+axelard tx axelarnet route-ibc-transfers \
+  --from <any-key>
+
+# Execute pending transfers on the Axelar chain
+axelard tx axelarnet execute-pending-transfers \
+  --from <any-key>
+
+# Retry a failed IBC transfer by sequence
+axelard tx axelarnet retry-ibc-transfer \
+  --chain osmosis --sequence 42 \
+  --from <any-key>
+
+# Route an approved general message to its destination
+axelard tx axelarnet route-message [message-id] \
+  --from <proxy-key>
+```
+
+<Tip>
+When diagnosing stuck IBC transfers, combine `axelard query axelarnet ibc-transfer-count` with your IBC relayer logs to identify which channels have backlogs before calling `retry-ibc-transfer`.
+</Tip>

@@ -1,0 +1,233 @@
+---
+title: "Axelar Governance: Proposals, Keys & Controllers"
+sidebarTitle: "Governance"
+description: "Learn how Axelar combines Cosmos SDK governance with a dedicated permission module governance key to control protocol-level operations and parameter updates."
+---
+
+Axelar's governance model layers two complementary systems: the standard Cosmos SDK `x/gov` module — which handles on-chain proposals voted on by AXL token holders — and a specialized **permission module** that manages a multisig governance key controlling privileged operations like chain activation, asset registration, and key rotation. Understanding how these two systems interact is essential for operators, integrators, and community members who participate in network governance.
+
+## Governance Architecture
+
+<CardGroup cols={2}>
+  <Card title="Cosmos SDK Gov Module" icon="landmark">
+    Token-weighted voting by AXL holders. Handles parameter updates, software upgrades, and general proposals via deposit and voting periods.
+  </Card>
+  <Card title="Permission Module" icon="key">
+    A multisig governance key with privileged access to controller-gated operations. Separate from validator voting power.
+  </Card>
+  <Card title="Controller Accounts" icon="user-shield">
+    Addresses registered by the governance key that can perform routine operational tasks without full governance overhead.
+  </Card>
+  <Card title="MsgUpdateParams" icon="sliders">
+    Since v1.3.0, each Axelar module exposes a governance-only `MsgUpdateParams` message for on-chain parameter updates.
+  </Card>
+</CardGroup>
+
+## The Governance Key
+
+The **governance key** is a multisig public key registered in the permission module. It holds the highest level of privilege within Axelar's custom permission system — distinct from the Cosmos SDK governance account — and is required to authorize operations such as activating new chains and rotating multisig keys.
+
+### Setting the Governance Key at Genesis
+
+Before launching a network, set the genesis governance key using:
+
+```bash
+axelard set-governance-key [threshold] [pubKey]... [flags]
+```
+
+**Example** — set a 2-of-3 multisig governance key:
+
+```bash
+axelard set-governance-key 2 \
+  axelarpub1addwnpepq... \
+  axelarpub1addwnpepq... \
+  axelarpub1addwnpepq...
+```
+
+<Note>
+  The `set-governance-key` command modifies `genesis.json` in place. Run it once during chain initialization before the first block, pointing `--home` to the node's data directory.
+</Note>
+
+### Updating the Governance Key On-Chain
+
+To rotate the governance key after genesis, the **current governance key** must sign and submit:
+
+```bash
+axelard tx permission update-governance-key [threshold] [pubKey]... \
+  --from <governance-key-address> \
+  --chain-id axelar \
+  --gas auto \
+  --gas-adjustment 1.4 \
+  -y
+```
+
+The threshold and all public keys of the **new** multisig key must be provided. The transaction must originate from an address authorized by the existing governance key.
+
+<Warning>
+  Losing access to the governance key without rotating it first is irreversible. Store all signing keys offline in separate, geographically distributed locations.
+</Warning>
+
+## Controller Accounts
+
+Controllers are accounts that the governance key has authorized to perform a subset of privileged operations. They provide an operational layer between the full governance key and day-to-day tasks.
+
+### Registering a Controller
+
+```bash
+axelard tx permission register-controller [controller-address] \
+  --from <governance-key-address> \
+  --chain-id axelar \
+  --gas auto \
+  -y
+```
+
+### Deregistering a Controller
+
+```bash
+axelard tx permission deregister-controller [controller-address] \
+  --from <governance-key-address> \
+  --chain-id axelar \
+  --gas auto \
+  -y
+```
+
+<Info>
+  Controller accounts can perform operations such as activating/deactivating chains (`axelard tx nexus activate-chain`) and registering chain maintainers, without requiring the full governance key to sign each transaction.
+</Info>
+
+## Submitting Governance Proposals
+
+Axelar uses the Cosmos SDK v1 governance format. Proposals are defined in a JSON file and submitted via:
+
+```bash
+axelard tx gov submit-proposal path/to/proposal.json \
+  --from <submitter> \
+  --chain-id axelar \
+  --gas auto \
+  --gas-adjustment 1.4 \
+  -y
+```
+
+### Proposal JSON Structure
+
+```json
+{
+  "messages": [
+    {
+      "@type": "/cosmos.bank.v1beta1.MsgSend",
+      "from_address": "axelar1...",
+      "to_address": "axelar1...",
+      "amount": [{ "denom": "uaxl", "amount": "1000000" }]
+    }
+  ],
+  "metadata": "4pIMOgIGx1vZGU=",
+  "deposit": "2000000uaxl",
+  "title": "Example Governance Proposal",
+  "summary": "A short description of what this proposal does.",
+  "expedited": false
+}
+```
+
+The `messages` array accepts any proto-JSON-encoded `sdk.Msg`. Metadata can be raw text, base64, stringified JSON, or an IPFS link.
+
+<Tip>
+  Use `axelard tx gov draft-proposal` to generate a skeleton proposal JSON with a single message type filled in. This helps avoid serialization errors.
+</Tip>
+
+### Other Governance Transactions
+
+| Command | Purpose |
+|---|---|
+| `axelard tx gov deposit [proposal-id] [amount]` | Add deposit to reach minimum threshold |
+| `axelard tx gov vote [proposal-id] yes\|no\|no_with_veto\|abstain` | Cast a vote |
+| `axelard tx gov weighted-vote [proposal-id] [options]` | Split-vote with weights |
+| `axelard tx gov cancel-proposal [proposal-id]` | Cancel before voting starts (creator only) |
+
+## Proposal Lifecycle
+
+<Steps>
+  <Step title="Draft & Submit">
+    A proposer prepares the proposal JSON and submits it with an initial deposit. The minimum deposit must be reached for the proposal to enter the voting period.
+  </Step>
+  <Step title="Deposit Period">
+    Any AXL holder can add deposits to help reach the minimum. If the minimum is not reached before the deposit period ends, deposits are burned and the proposal is rejected.
+  </Step>
+  <Step title="Voting Period">
+    Once the minimum deposit is reached, the voting period opens. Validators and delegators vote `yes`, `no`, `no_with_veto`, or `abstain`. The default voting period is 7 days on mainnet.
+  </Step>
+  <Step title="Tally & Execution">
+    At the end of the voting period the tally is computed. If quorum is met and the proposal passes (`yes > 50%` of non-abstain votes, veto `< 33.4%`), the messages in the proposal are executed automatically.
+  </Step>
+</Steps>
+
+<Note>
+  A `no_with_veto` vote that crosses the 33.4% threshold causes the proposal to fail and all deposits to be burned, regardless of the yes/no ratio.
+</Note>
+
+## MsgUpdateParams — Module Parameter Updates
+
+Since **v1.3.0**, every Axelar module exposes a `MsgUpdateParams` message that is gated behind the governance account. This replaces the legacy `x/params` subspace approach. To update parameters for any module, submit a governance proposal whose `messages` array contains the appropriate `MsgUpdateParams`:
+
+<Accordion title="Example: Update EVM module VotingGracePeriod">
+```json
+{
+  "messages": [
+    {
+      "@type": "/axelar.evm.v1beta1.MsgUpdateParams",
+      "authority": "axelar10d07y265gmmuvt4z0w9aw880jnsr700j7v9daj",
+      "params": {
+        "voting_grace_period": "15",
+        "revote_locking_period": "75"
+      }
+    }
+  ],
+  "deposit": "2000000uaxl",
+  "title": "Update EVM VotingGracePeriod to 15 blocks",
+  "summary": "Adjusts the EVM module's VotingGracePeriod to match 1s block time defaults."
+}
+```
+</Accordion>
+
+<Accordion title="Example: Update nexus module EndBlockerLimit">
+```json
+{
+  "messages": [
+    {
+      "@type": "/axelar.nexus.v1beta1.MsgUpdateParams",
+      "authority": "axelar10d07y265gmmuvt4z0w9aw880jnsr700j7v9daj",
+      "params": {
+        "end_blocker_limit": "50"
+      }
+    }
+  ],
+  "deposit": "2000000uaxl",
+  "title": "Update nexus EndBlockerLimit",
+  "summary": "Increases the nexus module's end-blocker processing limit."
+}
+```
+</Accordion>
+
+The `authority` field must be the governance module account address. Query it with:
+
+```bash
+axelard query auth module-account gov
+```
+
+## Key Governance-Controlled Operations
+
+The following operations require either a passing governance proposal or an authorized controller account:
+
+<CardGroup cols={2}>
+  <Card title="Chain Activation" icon="link">
+    Activating or deactivating external chains via `axelard tx nexus activate-chain` / `deactivate-chain`.
+  </Card>
+  <Card title="Asset Registration" icon="coins">
+    Registering new transferable assets and configuring fee structures for cross-chain transfers.
+  </Card>
+  <Card title="Key Rotation" icon="rotate">
+    Rotating the multisig key used to control gateway contracts via `axelard tx multisig rotate`.
+  </Card>
+  <Card title="Gateway Management" icon="server">
+    Setting or updating the gateway contract address for an EVM chain via `axelard tx evm set-gateway`.
+  </Card>
+</CardGroup>

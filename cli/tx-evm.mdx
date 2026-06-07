@@ -1,0 +1,634 @@
+---
+title: "EVM Transaction Commands for Axelar Core CLI"
+sidebarTitle: "EVM Transactions"
+description: "Submit EVM-module transactions with axelard: add chains, set gateways, deploy tokens, confirm events, sign commands, and rotate operatorship."
+---
+
+The `axelard tx evm` command group provides all transaction subcommands needed to manage EVM-compatible chains on the Axelar network. These commands allow operators and validators to register new chains, configure gateway contracts, deploy cross-chain tokens, confirm on-chain events, and sign batched gateway commands. All subcommands require a funded signing account and an active connection to an Axelar node.
+
+## Subcommands
+
+<Accordion title="add-chain — Add a new EVM chain">
+
+Registers a new EVM chain with the Axelar network. The chain configuration must be supplied as a path to a JSON file containing the key requirements and EVM module parameters.
+
+**Syntax**
+
+```bash
+axelard tx evm add-chain [name] [chain-config] [flags]
+```
+
+**Arguments**
+
+<ParamField path="name" type="string" required>
+  Human-readable name for the new EVM chain (e.g. `ethereum`, `avalanche`).
+</ParamField>
+
+<ParamField path="chain-config" type="string" required>
+  Path to a JSON file containing the chain's key requirements and EVM module parameters.
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Name or address of the key that signs and pays for the transaction.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Axelar network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit per transaction. Use `"auto"` for automatic estimation (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price in decimal format (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  Broadcasting mode: `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend to use: `os`, `file`, `kwallet`, `pass`, `test`, or `memory` (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Add EVM chain
+axelard tx evm add-chain ethereum /path/to/ethereum-config.json \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl \
+  --broadcast-mode sync
+```
+</CodeGroup>
+
+<Note>
+  The JSON config file must conform to the EVM module parameter schema. Refer to the Axelar network documentation for the required fields and format.
+</Note>
+
+</Accordion>
+
+<Accordion title="set-gateway — Set the gateway contract address">
+
+Sets (or updates) the AxelarGateway contract address for a registered EVM chain.
+
+**Syntax**
+
+```bash
+axelard tx evm set-gateway [chain] [address] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  Name of the EVM chain (e.g. `ethereum`).
+</ParamField>
+
+<ParamField path="address" type="string" required>
+  EVM address of the AxelarGateway contract (hex, `0x`-prefixed).
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Set gateway address
+axelard tx evm set-gateway ethereum 0xABCDEF1234567890ABCDEF1234567890ABCDEF12 \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+</Accordion>
+
+<Accordion title="create-deploy-token — Deploy a cross-chain token">
+
+Creates a deploy-token command targeting the AxelarGateway contract so that a wrapped ERC-20 token for the given origin asset can be deployed on the specified EVM chain.
+
+**Syntax**
+
+```bash
+axelard tx evm create-deploy-token [evm-chain] [origin-chain] [origin-asset] [token-name] [symbol] [decimals] [capacity] [mintLimit] [flags]
+```
+
+**Arguments**
+
+<ParamField path="evm-chain" type="string" required>
+  Target EVM chain where the token will be deployed (e.g. `ethereum`).
+</ParamField>
+
+<ParamField path="origin-chain" type="string" required>
+  Chain where the asset originates (e.g. `axelarnet`, `cosmos`).
+</ParamField>
+
+<ParamField path="origin-asset" type="string" required>
+  Denom or identifier of the asset on the origin chain (e.g. `uaxl`).
+</ParamField>
+
+<ParamField path="token-name" type="string" required>
+  Full display name of the token (e.g. `"Axelar"`).
+</ParamField>
+
+<ParamField path="symbol" type="string" required>
+  Token ticker symbol (e.g. `AXL`).
+</ParamField>
+
+<ParamField path="decimals" type="uint8" required>
+  Number of decimal places for the token (e.g. `6`).
+</ParamField>
+
+<ParamField path="capacity" type="string" required>
+  Maximum token supply allowed on the EVM chain (use `0` for unlimited).
+</ParamField>
+
+<ParamField path="mintLimit" type="string" required>
+  Per-mint cap for the token (use `0` for unlimited).
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--address" type="string">
+  Address of an existing ERC-20 token contract to wrap instead of deploying a new one (default `0x0000000000000000000000000000000000000000`).
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Deploy a new wrapped token
+axelard tx evm create-deploy-token \
+  ethereum axelarnet uaxl "Axelar" AXL 6 0 0 \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+
+```bash Wrap an existing ERC-20
+axelard tx evm create-deploy-token \
+  ethereum axelarnet uaxl "Axelar" AXL 6 0 0 \
+  --address 0xYourExistingToken \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+</Accordion>
+
+<Accordion title="confirm-gateway-txs — Confirm gateway transactions">
+
+Submits a vote to confirm one or more gateway transactions on an EVM chain. Validators use this command after observing a transaction on the external chain.
+
+**Syntax**
+
+```bash
+axelard tx evm confirm-gateway-txs [chain] [txID]... [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  Name of the EVM chain (e.g. `ethereum`).
+</ParamField>
+
+<ParamField path="txID" type="string" required>
+  One or more EVM transaction hashes to confirm (space-separated).
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Confirm a single transaction
+axelard tx evm confirm-gateway-txs ethereum \
+  0xabc123...def456 \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+
+```bash Confirm multiple transactions
+axelard tx evm confirm-gateway-txs ethereum \
+  0xabc123...def456 0x789abc...012def \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+</Accordion>
+
+<Accordion title="confirm-erc20-token — Confirm ERC20 token deployment">
+
+Confirms that an ERC-20 token has been deployed on a target EVM chain for an asset originating from another chain. The confirmation is tied to a specific EVM transaction ID.
+
+**Syntax**
+
+```bash
+axelard tx evm confirm-erc20-token [chain] [origin-chain] [origin-asset] [txID] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  EVM chain where the token was deployed (e.g. `ethereum`).
+</ParamField>
+
+<ParamField path="origin-chain" type="string" required>
+  Chain from which the asset originates (e.g. `axelarnet`).
+</ParamField>
+
+<ParamField path="origin-asset" type="string" required>
+  Asset denom on the origin chain (e.g. `uaxl`).
+</ParamField>
+
+<ParamField path="txID" type="string" required>
+  EVM transaction hash of the deployment transaction.
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Confirm ERC20 token deployment
+axelard tx evm confirm-erc20-token \
+  ethereum axelarnet uaxl 0xdeploymentTxHash \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+</Accordion>
+
+<Accordion title="confirm-transfer-operatorship — Confirm operatorship transfer">
+
+Confirms that a transfer-operatorship transaction has been executed on an EVM chain gateway. Validators vote on this to finalise the new operator set.
+
+**Syntax**
+
+```bash
+axelard tx evm confirm-transfer-operatorship [chain] [txID] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  Name of the EVM chain (e.g. `ethereum`).
+</ParamField>
+
+<ParamField path="txID" type="string" required>
+  EVM transaction hash of the transfer-operatorship transaction.
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Confirm transfer operatorship
+axelard tx evm confirm-transfer-operatorship \
+  ethereum 0xoperatorshipTxHash \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+</Accordion>
+
+<Accordion title="sign-commands — Sign pending gateway commands">
+
+Requests validators to sign the batch of pending commands for the specified EVM chain's gateway contract. Once enough signatures are collected the batch can be submitted to the gateway on the external chain.
+
+**Syntax**
+
+```bash
+axelard tx evm sign-commands [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  Name of the EVM chain whose pending commands should be signed (e.g. `ethereum`).
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Sign pending commands
+axelard tx evm sign-commands ethereum \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl \
+  --broadcast-mode sync
+```
+</CodeGroup>
+
+<Tip>
+  Run `sign-commands` after pending transfers have accumulated to batch multiple gateway commands into a single signed payload, reducing the number of external transactions required.
+</Tip>
+
+</Accordion>
+
+<Accordion title="transfer-operatorship — Transfer gateway operatorship">
+
+Creates a transfer-operatorship command for an EVM chain's gateway contract, reassigning control to the key identified by `keyID`.
+
+**Syntax**
+
+```bash
+axelard tx evm transfer-operatorship [chain] [keyID] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  Name of the EVM chain (e.g. `ethereum`).
+</ParamField>
+
+<ParamField path="keyID" type="string" required>
+  Identifier of the multisig key that will become the new gateway operator.
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Transfer operatorship
+axelard tx evm transfer-operatorship ethereum my-new-key-id \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+<Warning>
+  After issuing this command, call `sign-commands` so that validators produce the signed payload and then submit it to the gateway on the EVM chain. Operatorship does not change until the gateway transaction is executed.
+</Warning>
+
+</Accordion>
+
+<Accordion title="retry-event — Retry a failed EVM event">
+
+Retries processing of a previously failed event for a given EVM chain. Use this when an event was confirmed but could not be processed due to a transient error.
+
+**Syntax**
+
+```bash
+axelard tx evm retry-event [chain] [event-id] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  Name of the EVM chain that emitted the event (e.g. `ethereum`).
+</ParamField>
+
+<ParamField path="event-id" type="string" required>
+  Unique identifier of the failed event to retry.
+</ParamField>
+
+**Key Flags**
+
+<ParamField path="--from" type="string" required>
+  Signing key name or address.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID (default `"axelar"`).
+</ParamField>
+
+<ParamField path="--gas" type="string">
+  Gas limit (default `200000`).
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price (default `"0.007uaxl"`).
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  `sync` or `async` (default `"sync"`).
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend (default `"file"`).
+</ParamField>
+
+**Example**
+
+<CodeGroup>
+```bash Retry a failed event
+axelard tx evm retry-event ethereum 0xfailedEventId \
+  --from mykey \
+  --chain-id axelar \
+  --gas auto \
+  --gas-prices 0.007uaxl
+```
+</CodeGroup>
+
+</Accordion>
+
+## Common Flags
+
+All `axelard tx evm` subcommands accept the following standard transaction flags:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--from` | — | Key name or address used to sign |
+| `--chain-id` | `axelar` | Network chain ID |
+| `--gas` | `200000` | Gas limit; use `auto` for estimation |
+| `--gas-adjustment` | `1` | Multiplier applied to simulated gas estimate |
+| `--gas-prices` | `0.007uaxl` | Gas price in decimal format |
+| `--broadcast-mode` | `sync` | Broadcasting mode (`sync` \| `async`) |
+| `--keyring-backend` | `file` | Keyring backend (`os` \| `file` \| `test` \| `memory`) |
+| `--node` | `tcp://localhost:26657` | CometBFT RPC endpoint |
+| `--yes` | `true` | Skip interactive confirmation prompt |

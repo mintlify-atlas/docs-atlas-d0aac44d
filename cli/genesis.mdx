@@ -1,0 +1,546 @@
+---
+title: "axelard genesis: Genesis Configuration CLI Reference"
+sidebarTitle: "Genesis"
+description: "Reference for axelard genesis commands: add accounts, gentx, collect-gentxs, validate, migrate, configure EVM chains, and set Axelar module parameters."
+---
+
+The genesis commands bootstrap a new Axelar Network chain or prepare a node to join an existing one. They cover everything from adding funded accounts and creating validator transactions to configuring Axelar-specific module parameters and validating the final genesis file. These commands are typically run **once** before a chain launch, and most write directly to the `genesis.json` file in the node's home directory.
+
+```bash
+axelard genesis [subcommand] [flags]
+```
+
+---
+
+## `axelard genesis add-genesis-account`
+
+Adds a funded account to `genesis.json`. The account is identified by a bech32 address or a key name in the local keyring. Initial coin balances must use valid registered denominations.
+
+```bash
+axelard genesis add-genesis-account [address_or_key_name] [coin][,[coin]] [flags]
+```
+
+**Examples:**
+
+```bash
+# Add 1,000,000 uaxl to an address
+axelard genesis add-genesis-account axelar1abc... 1000000uaxl
+
+# Add multiple denominations at once
+axelard genesis add-genesis-account axelar1abc... 1000000uaxl,500000stake
+
+# Look up the address from a local key name
+axelard genesis add-genesis-account mykey 1000000uaxl
+
+# Add vesting account (linear vest over a period)
+axelard genesis add-genesis-account axelar1abc... 1000000uaxl \
+  --vesting-amount 800000uaxl \
+  --vesting-start-time 1700000000 \
+  --vesting-end-time 1730000000
+```
+
+<ParamField path="address_or_key_name" type="string" required>
+  The bech32 account address or local key name. If a key name is given, the address is resolved from the keyring.
+</ParamField>
+
+<ParamField path="coin" type="string" required>
+  Comma-separated initial coin balances (e.g., `1000000uaxl,100stake`).
+</ParamField>
+
+<ParamField path="--append" type="boolean">
+  Append coins to an account that already exists in `genesis.json` rather than replacing it.
+</ParamField>
+
+<ParamField path="--vesting-amount" type="string">
+  Amount of coins that should be subject to a vesting schedule.
+</ParamField>
+
+<ParamField path="--vesting-start-time" type="int">
+  Unix epoch timestamp for the start of the vesting schedule.
+</ParamField>
+
+<ParamField path="--vesting-end-time" type="int">
+  Unix epoch timestamp for the end of the vesting schedule.
+</ParamField>
+
+<ParamField path="--home" type="string">
+  Application home directory. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend for resolving key names. Defaults to `file`.
+</ParamField>
+
+<ParamField path="--module-name" type="string">
+  If set, adds a module account with the given module name rather than a regular account.
+</ParamField>
+
+---
+
+## `axelard genesis bulk-add-genesis-account`
+
+Adds multiple genesis accounts in a single operation from a JSON file. Each entry specifies an address, coin balances, and optional vesting parameters.
+
+```bash
+axelard genesis bulk-add-genesis-account [/path/to/accounts.json] [flags]
+```
+
+**Input file format:**
+
+```json
+[
+  {
+    "address": "axelar1abc...",
+    "coins": [
+      { "denom": "uaxl", "amount": "1000000" }
+    ]
+  },
+  {
+    "address": "axelar1def...",
+    "coins": [
+      { "denom": "uaxl", "amount": "500000" }
+    ],
+    "vesting_amt": [
+      { "denom": "uaxl", "amount": "400000" }
+    ],
+    "vesting_start": 1724711478,
+    "vesting_end": 1914013878
+  }
+]
+```
+
+<ParamField path="/path/to/accounts.json" type="string" required>
+  Path to the JSON file containing the list of genesis accounts.
+</ParamField>
+
+<ParamField path="--append" type="boolean">
+  Append coins to accounts already present in `genesis.json`.
+</ParamField>
+
+<ParamField path="--home" type="string">
+  Application home directory. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+---
+
+## `axelard genesis gentx`
+
+Creates a signed genesis transaction that registers a validator with an initial self-delegation. The transaction is written to the `$HOME/.axelar/config/gentx/` directory and later collected by `collect-gentxs`.
+
+```bash
+axelard genesis gentx [key_name] [amount] [flags]
+```
+
+**Example:**
+
+```bash
+axelard genesis gentx my-validator-key 1000000000uaxl \
+  --chain-id axelar-dojo-1 \
+  --moniker "My Validator" \
+  --commission-rate 0.05 \
+  --commission-max-rate 0.20 \
+  --commission-max-change-rate 0.01 \
+  --min-self-delegation 1 \
+  --website "https://myvalidator.io" \
+  --security-contact "security@myvalidator.io" \
+  --keyring-backend file
+```
+
+<ParamField path="key_name" type="string" required>
+  Name of the key in the keyring to sign the genesis transaction.
+</ParamField>
+
+<ParamField path="amount" type="string" required>
+  Amount of tokens to self-delegate (e.g., `1000000000uaxl`).
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Network chain ID. Must match the genesis file. Defaults to `axelar`.
+</ParamField>
+
+<ParamField path="--moniker" type="string">
+  Validator display name shown in the P2P network. Defaults to `node`.
+</ParamField>
+
+<ParamField path="--commission-rate" type="string">
+  Initial commission rate as a decimal (e.g., `0.05` for 5%).
+</ParamField>
+
+<ParamField path="--commission-max-rate" type="string">
+  Maximum commission rate the validator may ever charge.
+</ParamField>
+
+<ParamField path="--commission-max-change-rate" type="string">
+  Maximum commission rate change per day.
+</ParamField>
+
+<ParamField path="--min-self-delegation" type="string">
+  Minimum self-delegation amount the validator must maintain.
+</ParamField>
+
+<ParamField path="--website" type="string">
+  Validator's optional website URL.
+</ParamField>
+
+<ParamField path="--identity" type="string">
+  Optional identity signature (e.g., a Keybase fingerprint).
+</ParamField>
+
+<ParamField path="--security-contact" type="string">
+  Security contact email address for the validator.
+</ParamField>
+
+<ParamField path="--details" type="string">
+  Free-text description of the validator.
+</ParamField>
+
+<ParamField path="--ip" type="string">
+  Node's public P2P IP address. Defaults to `127.0.0.1`.
+</ParamField>
+
+<ParamField path="--node-id" type="string">
+  Override the node ID included in the gentx. Defaults to the ID from `priv_validator_key.json`.
+</ParamField>
+
+<ParamField path="--output-document" type="string">
+  Write the gentx JSON to a specific file path instead of the default location.
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend for the signing key. Defaults to `file`.
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price for the gentx fee. Defaults to `0.007uaxl`.
+</ParamField>
+
+<Note>
+  Default delegation parameters: `commission-rate=0.1`, `commission-max-rate=0.2`, `commission-max-change-rate=0.01`, `min-self-delegation=1`. Override any of these using the corresponding flags.
+</Note>
+
+---
+
+## `axelard genesis collect-gentxs`
+
+Reads all gentx JSON files from the gentx directory and aggregates them into `genesis.json`, making the validators active at genesis.
+
+```bash
+axelard genesis collect-gentxs [flags]
+```
+
+<ParamField path="--gentx-dir" type="string">
+  Override the directory from which gentx files are read. Defaults to `$HOME/.axelar/config/gentx/`.
+</ParamField>
+
+<ParamField path="--home" type="string">
+  Application home directory. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+<Tip>
+  Run `collect-gentxs` after all validators have submitted their gentx files to the designated directory. This is typically the final step before validating and distributing the genesis file.
+</Tip>
+
+---
+
+## `axelard genesis validate`
+
+Validates the genesis file at the default location or at a specified path. Checks that the genesis is well-formed, all module states are valid, and the file passes all registered invariant checks.
+
+```bash
+axelard genesis validate [file] [flags]
+```
+
+**Examples:**
+
+```bash
+# Validate the default genesis file
+axelard genesis validate
+
+# Validate a specific file
+axelard genesis validate /path/to/genesis.json
+```
+
+<ParamField path="file" type="string">
+  Path to the genesis file to validate. Defaults to `$HOME/.axelar/config/genesis.json`.
+</ParamField>
+
+---
+
+## `axelard genesis migrate`
+
+Migrates a genesis file from one Cosmos SDK version format to another, printing the result to stdout.
+
+```bash
+axelard genesis migrate [target-version] [genesis-file] [flags]
+```
+
+**Example:**
+
+```bash
+axelard genesis migrate v0.47 /path/to/old-genesis.json \
+  --chain-id axelar-dojo-1 \
+  --genesis-time 2024-01-01T00:00:00Z \
+  --output-document /path/to/new-genesis.json
+```
+
+<ParamField path="target-version" type="string" required>
+  Target Cosmos SDK version format (e.g., `v0.47`).
+</ParamField>
+
+<ParamField path="genesis-file" type="string" required>
+  Path to the source genesis file.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Override the chain ID in the output genesis. Defaults to `axelar`.
+</ParamField>
+
+<ParamField path="--genesis-time" type="string">
+  Override the genesis time in the output (RFC3339 format).
+</ParamField>
+
+<ParamField path="--output-document" type="string">
+  Write migrated genesis to this file instead of printing to stdout.
+</ParamField>
+
+---
+
+## Axelar-Specific Genesis Commands
+
+Axelar extends the standard Cosmos SDK genesis tooling with commands for configuring its cross-chain and EVM-specific modules. These commands write directly to `genesis.json` and are run at the root `axelard` level (not under `axelard genesis`).
+
+### `axelard add-genesis-evm-chain`
+
+Registers a new EVM-compatible chain in `genesis.json`, enabling Axelar to bridge assets to and from it.
+
+```bash
+axelard add-genesis-evm-chain [name] [flags]
+```
+
+**Example:**
+
+```bash
+axelard add-genesis-evm-chain ethereum --home ~/.axelar
+```
+
+<ParamField path="name" type="string" required>
+  The name of the EVM chain to add (e.g., `ethereum`, `avalanche`).
+</ParamField>
+
+<ParamField path="--home" type="string">
+  Node's home directory. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+---
+
+### `axelard set-genesis-chain-params`
+
+Sets EVM chain parameters (such as confirmation height and chain ID) for a chain already registered in `genesis.json`.
+
+```bash
+axelard set-genesis-chain-params evm [chain] [flags]
+```
+
+**Example:**
+
+```bash
+axelard set-genesis-chain-params evm ethereum \
+  --evm-chain-id 1 \
+  --evm-network-name mainnet \
+  --confirmation-height 35 \
+  --revote-locking-period 50
+```
+
+<ParamField path="--evm-chain-id" type="string">
+  Integer EVM chain ID (e.g., `1` for Ethereum mainnet).
+</ParamField>
+
+<ParamField path="--evm-network-name" type="string">
+  Network name for the EVM chain.
+</ParamField>
+
+<ParamField path="--confirmation-height" type="uint">
+  Number of block confirmations required before a deposit is considered final.
+</ParamField>
+
+<ParamField path="--revote-locking-period" type="int">
+  Locking period for re-vote operations on this chain.
+</ParamField>
+
+<ParamField path="--network" type="string">
+  Network name to set for the given chain.
+</ParamField>
+
+---
+
+### `axelard set-genesis-evm-contracts`
+
+Configures EVM contract ABIs (burner and token contracts) in `genesis.json`. These ABIs are used by the EVM module to generate and parse cross-chain contract calls.
+
+```bash
+axelard set-genesis-evm-contracts [flags]
+```
+
+<ParamField path="--burnable" type="string">
+  File path to the burner contract ABI JSON.
+</ParamField>
+
+<ParamField path="--token" type="string">
+  File path to the token contract ABI JSON.
+</ParamField>
+
+<ParamField path="--home" type="string">
+  Node's home directory. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+---
+
+### `axelard set-genesis-auth`
+
+Configures the `auth` module genesis parameters, such as the maximum number of signatures allowed in a single transaction.
+
+```bash
+axelard set-genesis-auth [flags]
+```
+
+<ParamField path="--tx-sig-limit" type="uint">
+  Maximum number of signatures allowed in a transaction.
+</ParamField>
+
+<ParamField path="--home" type="string">
+  Node's home directory. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+---
+
+### `axelard set-genesis-gov`
+
+Configures the governance module genesis parameters, including deposit periods, voting period, and minimum deposit amounts.
+
+```bash
+axelard set-genesis-gov [flags]
+```
+
+<ParamField path="--minimum-deposit" type="string">
+  Minimum deposit amount required for a proposal to enter the voting period.
+</ParamField>
+
+<ParamField path="--max-deposit-period" type="string">
+  Maximum time (nanoseconds) AXL holders have to deposit on a proposal.
+</ParamField>
+
+<ParamField path="--voting-period" type="string">
+  Duration of the standard voting period (nanoseconds).
+</ParamField>
+
+<ParamField path="--expedited-voting-period" type="string">
+  Duration of the expedited voting period (nanoseconds).
+</ParamField>
+
+<ParamField path="--home" type="string">
+  Node's home directory. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+---
+
+### `axelard set-genesis-staking`
+
+Configures staking module genesis parameters such as the bonding token denomination, unbonding period, and maximum validator count.
+
+```bash
+axelard set-genesis-staking [flags]
+```
+
+<ParamField path="--bond-denom" type="string">
+  The coin denomination used for bonding (e.g., `uaxl`).
+</ParamField>
+
+<ParamField path="--unbonding-period" type="string">
+  Duration for the unbonding period (e.g., `"504h"` for 21 days).
+</ParamField>
+
+<ParamField path="--max-validators" type="uint32">
+  Maximum number of active validators. Max value is `65535`.
+</ParamField>
+
+<ParamField path="--max-entries" type="uint32">
+  Maximum number of redelegations or unbonding delegations allowed simultaneously per pair.
+</ParamField>
+
+<ParamField path="--historical-entries" type="uint32">
+  Number of historical staking entries to retain.
+</ParamField>
+
+<ParamField path="--home" type="string">
+  Node's home directory. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+---
+
+### `axelard set-governance-key`
+
+Sets the genesis multisig governance key for the Axelar network. This key has elevated authority for governance actions.
+
+```bash
+axelard set-governance-key [threshold] [[pubKey]...] [flags]
+```
+
+**Example:**
+
+```bash
+axelard set-governance-key 3 \
+  axelarpub1... \
+  axelarpub2... \
+  axelarpub3... \
+  axelarpub4... \
+  axelarpub5...
+```
+
+<ParamField path="threshold" type="integer" required>
+  The minimum number of public keys required to authorize a governance action (K of N).
+</ParamField>
+
+<ParamField path="pubKey" type="string" required>
+  One or more public keys that form the governance multisig set.
+</ParamField>
+
+<ParamField path="--home" type="string">
+  Node's home directory. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+---
+
+## Standard Genesis Workflow
+
+The following sequence is typical for bootstrapping a new Axelar chain:
+
+```bash
+# 1. Initialize node configuration
+axelard init my-validator --chain-id axelar-dojo-1
+
+# 2. Add funded genesis accounts
+axelard genesis add-genesis-account mykey 1000000000uaxl
+
+# 3. Configure Axelar-specific parameters
+axelard set-genesis-staking --bond-denom uaxl --unbonding-period 1814400s
+axelard set-genesis-gov --minimum-deposit 100000000uaxl --voting-period 604800000000000
+axelard add-genesis-evm-chain ethereum
+axelard set-genesis-chain-params evm ethereum --evm-chain-id 1 --confirmation-height 35
+
+# 4. Create the genesis validator transaction
+axelard genesis gentx mykey 1000000000uaxl \
+  --chain-id axelar-dojo-1 \
+  --commission-rate 0.05 \
+  --commission-max-rate 0.20 \
+  --commission-max-change-rate 0.01
+
+# 5. Collect all gentxs into genesis.json
+axelard genesis collect-gentxs
+
+# 6. Validate the final genesis file
+axelard genesis validate
+```
+
+<Info>
+  For a multi-validator genesis, each validator runs steps 1–4 independently, then submits their gentx file to the chain coordinator. The coordinator runs `collect-gentxs` and `validate` before distributing the final `genesis.json` to all participants.
+</Info>

@@ -1,0 +1,93 @@
+---
+title: "Axelar Core: Decentralized Cross-Chain Protocol"
+sidebarTitle: "Introduction"
+description: "Learn what Axelar Core is, its custom Cosmos SDK modules, and how validators, integrators, and developers can leverage the protocol."
+---
+
+Axelar Core is the main blockchain application powering the Axelar Network — a decentralized interoperability protocol that enables secure, permissionless communication between EVM chains, IBC-connected Cosmos chains, and CosmWasm smart-contract environments. Built on the Cosmos SDK with CometBFT consensus, `axelar-core` compiles into the `axelard` binary that validators run to participate in Axelar's proof-of-stake network. Unlike bridges that rely on a small group of multi-sig signers, Axelar Core coordinates cross-chain messages through a full validator set, threshold multi-party computation (via the `tofnd` sidecar), and on-chain governance — giving integrators a trustless, programmable routing layer across dozens of connected ecosystems.
+
+## What Is Axelar Core vs. the Axelar Network?
+
+**Axelar Network** is the broader interoperability ecosystem: the set of connected chains, the token economy (AXL/uaxl), the gateway smart contracts deployed on each EVM chain, and the developer-facing SDKs.
+
+**Axelar Core** (`axelar-core`) is the Cosmos SDK node software at the heart of that network. It defines the on-chain state machine, the custom modules that handle cross-chain routing and signing, and the CLI tooling (`axelard`) for interacting with a node. Everything that a validator, integrator, or protocol developer touches at the protocol level flows through this repository.
+
+<Note>
+  The current release series is **v1.3.x**, built on Cosmos SDK v0.50, IBC v8, and CosmWasm v0.54. The `axelard comet` command family replaces the legacy `axelard tendermint` commands as of v1.3.0.
+</Note>
+
+## Key Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Cross-Chain Asset Transfers" icon="arrow-right-arrow-left" href="./quickstart">
+    Move tokens natively between EVM chains, IBC chains, and Cosmos-based networks. The EVM module manages gateway contracts and command batches; the axelarnet module handles IBC transfers; the nexus module coordinates routing between all registered chains.
+  </Card>
+  <Card title="General Message Passing (GMP)" icon="envelope" href="./architecture">
+    Call arbitrary smart-contract functions on a destination chain from any source chain. A `ContractCall` or `ContractCallWithToken` event on the source chain's gateway is confirmed by validators, routed through nexus, and delivered as an `ApproveContractCall` command on the destination gateway.
+  </Card>
+  <Card title="Validator Participation" icon="server" href="./quickstart">
+    Run an `axelard` full node and the `vald` sidecar to become a chain maintainer. Vote on cross-chain events, participate in multisig key generation, and earn rewards proportional to correct participation.
+  </Card>
+  <Card title="Protocol Integration" icon="plug" href="./architecture">
+    Register a new EVM or IBC chain with the Axelar Network through governance, deploy a gateway contract, and enable token transfers and GMP for your users without running custom bridge infrastructure.
+  </Card>
+</CardGroup>
+
+## Custom Modules
+
+Axelar Core extends the standard Cosmos SDK module set with a suite of purpose-built modules. Each module owns a slice of state and exposes its own transactions, queries, and ABCI hooks.
+
+<AccordionGroup>
+  <Accordion title="nexus — Cross-Chain Router">
+    The nexus module is the central routing layer. It maintains the registry of all connected chains and assets, queues `GeneralMessage` objects for delivery, tracks chain maintainer vote records, and runs the `EndBlocker` that routes queued messages to their destination chains each block. All other Axelar modules interact with nexus through its keeper interface.
+  </Accordion>
+  <Accordion title="evm — EVM Chain Manager">
+    The evm module manages the lifecycle of each registered EVM chain: gateway contract bytecode, command batching, token deployment confirmation, and key-transfer confirmation. Its `EndBlocker` translates confirmed EVM events into nexus messages and converts inbound nexus messages into signed gateway commands ready for execution on the destination EVM chain.
+  </Accordion>
+  <Accordion title="axelarnet — IBC & Native Asset Handler">
+    The axelarnet module is Axelar's IBC middleware. It intercepts inbound IBC transfers, wraps them as cross-chain messages for nexus to route, and handles outbound IBC transfers to non-EVM Cosmos chains. It also governs the native `uaxl` asset and deposit-address linking.
+  </Accordion>
+  <Accordion title="multisig — Threshold Signing">
+    The multisig module coordinates distributed key generation (keygen) and signing sessions across the validator set. When a signing session is triggered (e.g., to sign a batch of EVM gateway commands), validators participate via the `vald` sidecar and the `tofnd` threshold-signing daemon. Completed signatures are collected on-chain and attached to the outbound command batch.
+  </Accordion>
+  <Accordion title="snapshot — Validator Snapshots">
+    The snapshot module captures a point-in-time view of the active validator set for use in keygen and signing sessions. It applies eligibility filters (bonded status, proxy registration) to determine which validators participate in a given threshold operation.
+  </Accordion>
+  <Accordion title="vote — Cross-Chain Event Voting">
+    The vote module implements a poll-based voting system. When vald detects an event on an external chain (e.g., a `ContractCall` emitted by an EVM gateway), it casts a vote on-chain. Once a poll reaches a quorum threshold, the result is finalized and forwarded to the relevant handler (evm, axelarnet, etc.).
+  </Accordion>
+  <Accordion title="permission — Role-Based Access Control">
+    The permission module defines governance-controlled roles (e.g., `CHAIN_MANAGEMENT`) that restrict which addresses may submit sensitive transactions such as registering chains or updating gateway bytecode outside of full governance proposals.
+  </Accordion>
+  <Accordion title="reward — Validator Incentives">
+    The reward module tracks per-chain reward pools funded by cross-chain transfer fees. Chain maintainers (validators registered for a specific external chain) accumulate rewards proportional to their correct vote participation. The nexus `EndBlocker` calls into reward to clear rewards for underperforming maintainers.
+  </Accordion>
+</AccordionGroup>
+
+## Who Should Use This Documentation?
+
+<CardGroup cols={2}>
+  <Card title="Validators" icon="shield-check">
+    Operators who want to run a full `axelard` node, register as chain maintainers, and run the `vald` + `tofnd` stack for external chain confirmation and multisig signing.
+  </Card>
+  <Card title="Protocol Integrators" icon="link">
+    Teams adding a new EVM or IBC chain to the Axelar Network — deploying a gateway contract, submitting governance proposals, and configuring chain parameters.
+  </Card>
+  <Card title="dApp Developers" icon="code">
+    Builders using Axelar's General Message Passing SDK to send cross-chain calls or transfer assets between chains without running infrastructure.
+  </Card>
+  <Card title="Core Contributors" icon="wrench">
+    Engineers contributing to `axelar-core` itself — writing new modules, updating gateway bytecode, or extending the vald event-processing pipeline.
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="./quickstart">
+    Build or download the `axelard` binary, satisfy the smart-contract bytecode dependency, and start a node in minutes.
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="./architecture">
+    Explore the component topology — axelard, vald, tofnd — and trace a cross-chain message from source chain to destination contract.
+  </Card>
+</CardGroup>

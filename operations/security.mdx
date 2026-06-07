@@ -1,0 +1,272 @@
+---
+title: "Security: Binary Verification, Keys & Best Practices"
+sidebarTitle: "Security"
+description: "Verify Axelar release binaries with GPG, understand responsible disclosure, protect governance and validator keys, and harden your node's network perimeter."
+---
+
+Security in the Axelar Network spans several layers: verifying that the `axelard` binary you run is authentic, protecting the cryptographic keys that control high-value operations, following responsible disclosure procedures when vulnerabilities are found, and hardening the network perimeter of every node. This page consolidates security best practices for validators, operators, and security researchers.
+
+## Binary Verification with GPG
+
+Before running any `axelard` binary, verify it was signed by the Axelar team. Axelar signs all release binaries with a GPG key managed by Axelar Network Devs.
+
+**Axelar's public key ID:** `5D9FFADEED11FA5D`
+
+<Steps>
+  <Step title="Download the binary and its signature">
+    Go to the [Axelar Core releases page](https://github.com/axelarnetwork/axelar-core/releases) and download:
+    - The `axelard` binary for your OS and architecture (e.g. `axelard-linux-amd64-v1.3.0`)
+    - The corresponding `.asc` signature file (e.g. `axelard-linux-amd64-v1.3.0.asc`)
+  </Step>
+  <Step title="Import Axelar's public key">
+    ```bash
+    curl https://keybase.io/axelardev/pgp_keys.asc | gpg --import
+    ```
+    You should see output similar to:
+    ```
+    gpg: key 5D9FFADEED11FA5D: public key "Axelar Network Devs <eng@axelar.network>" imported
+    gpg: Total number processed: 1
+    gpg:               imported: 1
+    ```
+  </Step>
+  <Step title="Trust the imported key">
+    Enter GPG interactive mode for the Axelar key:
+    ```bash
+    gpg --edit-key 5D9FFADEED11FA5D
+    ```
+    At the `gpg>` prompt, type `trust`, then select `5` (ultimate trust), and confirm with `y`. Exit with `quit`.
+  </Step>
+  <Step title="Verify the binary signature">
+    ```bash
+    gpg --verify axelard-linux-amd64-v1.3.0.asc axelard-linux-amd64-v1.3.0
+    ```
+    A successful verification produces:
+    ```
+    gpg: Signature made Mon Jan 01 00:00:00 2024 UTC
+    gpg:                using RSA key 5D9FFADEED11FA5D
+    gpg: Good signature from "Axelar Network Devs <eng@axelar.network>" [ultimate]
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  **Never run an unsigned or unverified binary.** A compromised binary could leak your validator's private keys or sign malicious transactions on your behalf. If `gpg --verify` returns anything other than `Good signature`, do not proceed.
+</Warning>
+
+### Platform-Specific Example Verification
+
+<Tabs>
+  <Tab title="Linux (amd64)">
+    ```bash
+    # Download
+    wget https://github.com/axelarnetwork/axelar-core/releases/download/v1.3.0/axelard-linux-amd64-v1.3.0
+    wget https://github.com/axelarnetwork/axelar-core/releases/download/v1.3.0/axelard-linux-amd64-v1.3.0.asc
+
+    # Verify
+    gpg --verify axelard-linux-amd64-v1.3.0.asc axelard-linux-amd64-v1.3.0
+
+    # Install
+    chmod +x axelard-linux-amd64-v1.3.0
+    sudo mv axelard-linux-amd64-v1.3.0 /usr/local/bin/axelard
+    ```
+  </Tab>
+  <Tab title="macOS (arm64)">
+    ```bash
+    # Download
+    curl -LO https://github.com/axelarnetwork/axelar-core/releases/download/v1.3.0/axelard-darwin-arm64-v1.3.0
+    curl -LO https://github.com/axelarnetwork/axelar-core/releases/download/v1.3.0/axelard-darwin-arm64-v1.3.0.asc
+
+    # Verify
+    gpg --verify axelard-darwin-arm64-v1.3.0.asc axelard-darwin-arm64-v1.3.0
+
+    # Install
+    chmod +x axelard-darwin-arm64-v1.3.0
+    mv axelard-darwin-arm64-v1.3.0 /usr/local/bin/axelard
+    ```
+  </Tab>
+  <Tab title="Docker">
+    ```bash
+    # Pull from Docker Hub (images are also signed via the release workflow)
+    docker pull axelarnet/axelar-core:v1.3.0
+
+    # Verify the image digest against the release notes
+    docker inspect axelarnet/axelar-core:v1.3.0 --format '{{.Id}}'
+    ```
+  </Tab>
+</Tabs>
+
+## Bug Bounty Program
+
+Axelar operates a bug bounty program through **Immunefi** for responsible disclosure of security vulnerabilities:
+
+- **Immunefi Program:** [https://immunefi.com/bug-bounty/axelarnetwork/information/](https://immunefi.com/bug-bounty/axelarnetwork/information/)
+- **Docs overview:** [https://docs.axelar.dev/bug-bounty](https://docs.axelar.dev/bug-bounty)
+
+<CardGroup cols={2}>
+  <Card title="Critical" icon="triangle-exclamation">
+    Immediate threat to critical systems (e.g., funds at risk). Highest reward tier.
+  </Card>
+  <Card title="High" icon="circle-exclamation">
+    Significant impact on major functionality. High reward tier.
+  </Card>
+  <Card title="Medium" icon="circle-info">
+    Impacts minor features or exposes non-sensitive data. Medium reward tier.
+  </Card>
+  <Card title="Low" icon="circle-check">
+    Minimal impact. Lower reward tier.
+  </Card>
+</CardGroup>
+
+<Warning>
+  **Do not test vulnerabilities on Axelar mainnet, testnet, or any publicly accessible Axelar-powered frontend** (e.g., satellite.money, Squid). Testing on production environments disqualifies you from receiving any bounty.
+</Warning>
+
+## Responsible Disclosure Process
+
+If you discover a security vulnerability in any Axelar repository:
+
+<Steps>
+  <Step title="Report privately">
+    Choose one of:
+    - **Email:** `security@interoplabs.io` with full vulnerability details
+    - **Immunefi:** Submit via the [Immunefi bug bounty page](https://immunefi.com/bug-bounty/axelarnetwork/information/)
+
+    Include: vulnerability type, description, reproduction steps, impact assessment, and potential exploit scenario.
+  </Step>
+  <Step title="Await confirmation">
+    The Axelar security team will confirm receipt within **48 hours**.
+  </Step>
+  <Step title="Assessment">
+    The team evaluates severity and provides an estimated remediation timeline.
+  </Step>
+  <Step title="Patch & verification">
+    Once a fix is developed, you will be contacted to verify the solution resolves the issue.
+  </Step>
+  <Step title="Coordinated disclosure">
+    After the fix is deployed (which may require a governance upgrade), details may be publicly disclosed with team approval.
+  </Step>
+</Steps>
+
+<Note>
+  Keep all vulnerability details and communications private and confidential until a patch is in place. If a network upgrade is required, additional time may be needed to pass a governance proposal.
+</Note>
+
+**Do not** report security vulnerabilities through GitHub Issues or public channels.
+
+## Governance Key Security
+
+The governance key controls critical protocol-level operations including chain activation, key rotation, and gateway management. It is the highest-privilege key in Axelar's permission module.
+
+<CardGroup cols={2}>
+  <Card title="Hardware Security Modules" icon="microchip">
+    Store governance key shards on HSMs or hardware wallets. Never hold the assembled key on a networked machine.
+  </Card>
+  <Card title="Geographic Distribution" icon="globe">
+    Distribute signers of the multisig governance key across different organizations and geographic locations.
+  </Card>
+  <Card title="Threshold Design" icon="shield-halved">
+    Use a threshold that requires compromise of multiple independent parties (e.g., 3-of-5) before any governance key operation can be authorized.
+  </Card>
+  <Card title="Regular Rotation" icon="rotate">
+    Rotate the governance key periodically using `axelard tx permission update-governance-key` even if no compromise is suspected.
+  </Card>
+</CardGroup>
+
+## Validator Key Security
+
+### Consensus Key
+
+The validator consensus key (used for CometBFT block signing) should be protected with a remote signer such as [tmkms](https://github.com/iqlusioninc/tmkms) or [horcrux](https://github.com/strangelove-ventures/horcrux). Never keep the consensus key on the validator's public-facing machine.
+
+### Proxy (Broadcaster) Account Security
+
+Axelar validators use a **proxy account** (also called a broadcaster account) as an intermediary between the validator identity and on-chain operations. This separation means:
+
+- The validator operator key is never exposed in routine operational transactions.
+- A compromised proxy account cannot directly slash the validator or steal staked funds.
+- The proxy account can be rotated if compromised without affecting validator registration.
+
+<Info>
+  Register your proxy account with your validator using:
+  ```bash
+  axelard tx snapshot register-proxy [proxy-address] \
+    --from <validator-operator-key> \
+    --chain-id axelar \
+    -y
+  ```
+  The vald process signs confirmations using the proxy key, not the validator operator key.
+</Info>
+
+## Key Rotation Best Practices
+
+Key rotation is a critical security control for multisig keys used to control EVM gateway contracts:
+
+- Rotate keys on a regular schedule (e.g., every 3–6 months) and after any suspected compromise.
+- Ensure the key generation ceremony (`axelard tx multisig start-keygen`) includes all active validators.
+- After key generation completes, rotate the active key with `axelard tx multisig rotate [chain] [keyID]`.
+- Confirm the operatorship transfer on the EVM chain with `axelard tx evm confirm-transfer-operatorship`.
+- Verify the new key is active before decommissioning the old one.
+
+<Warning>
+  A failed key rotation that leaves the gateway contract with no valid operators will halt all transfers on that chain. Test the rotation process on testnet before executing on mainnet.
+</Warning>
+
+## Network Security
+
+### Firewall and Port Exposure
+
+A production Axelar node should expose only the minimum required ports:
+
+| Port | Protocol | Purpose | Recommendation |
+|---|---|---|---|
+| `26656` | TCP | CometBFT P2P (peer connections) | Expose publicly |
+| `26657` | TCP | CometBFT RPC | Restrict to trusted IPs only |
+| `9090` | TCP | gRPC | Restrict or use TLS |
+| `1317` | TCP | REST API | Restrict or put behind reverse proxy |
+| `26660` | TCP | Prometheus metrics | Restrict to monitoring stack |
+
+<Tabs>
+  <Tab title="UFW (Ubuntu)">
+    ```bash
+    # Allow P2P
+    ufw allow 26656/tcp
+
+    # Allow RPC only from trusted monitoring IP
+    ufw allow from 10.0.0.5 to any port 26657
+
+    # Block everything else
+    ufw default deny incoming
+    ufw enable
+    ```
+  </Tab>
+  <Tab title="iptables">
+    ```bash
+    # Allow P2P from anywhere
+    iptables -A INPUT -p tcp --dport 26656 -j ACCEPT
+
+    # Allow RPC only from trusted subnet
+    iptables -A INPUT -p tcp --dport 26657 -s 10.0.0.0/24 -j ACCEPT
+    iptables -A INPUT -p tcp --dport 26657 -j DROP
+
+    # Save rules
+    iptables-save > /etc/iptables/rules.v4
+    ```
+  </Tab>
+</Tabs>
+
+### Sentry Node Architecture
+
+For high-value validators, use a **sentry node** architecture:
+
+- Validators connect only to private sentry nodes — never directly to the public internet.
+- Sentry nodes handle all public P2P connections and relay blocks and transactions to the validator.
+- If a sentry node is attacked or goes down, add more sentries without exposing the validator.
+
+### Additional Hardening Recommendations
+
+- Use SSH key authentication only; disable password-based SSH login.
+- Enable automatic security updates for the operating system.
+- Monitor for missed blocks and alert immediately if the validator goes offline.
+- Run the node as a non-root user with only the permissions needed to read/write the home directory.
+- Encrypt the disk volume containing the validator home directory.
+- Keep `axelard`, Go, and system packages up to date, especially for security releases.

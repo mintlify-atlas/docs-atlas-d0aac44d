@@ -1,0 +1,138 @@
+---
+title: "Vote Module: Quadratic Voting for Cross-Chain Events"
+sidebarTitle: "Vote"
+description: "The Vote module implements stake-weighted quadratic voting for confirming external chain events, managing poll lifecycle from creation through threshold completion or expiry."
+---
+
+The Vote module is Axelar's mechanism for reaching decentralized consensus on events that occur on external chains. When validators observe a transaction on an EVM chain — a token deposit, gateway command, or general message — they open a **poll** and cast votes. The module tallies voting power using quadratic weighting and closes the poll once a threshold is reached or the poll expires. Other modules (EVM, axelarnet) register handlers with the Vote module's router to process the result of each poll.
+
+<CardGroup cols={2}>
+  <Card title="Poll Lifecycle" icon="circle-dot">
+    Polls transition from `Pending` → `Completed` or `Failed` → `Expired`, with each state driven by vote tally and block height.
+  </Card>
+  <Card title="Quadratic Voting" icon="chart-line">
+    Voting power is computed using the square root of each validator's stake, reducing the outsized influence of large validators.
+  </Card>
+  <Card title="Vote Router" icon="route">
+    Modules register handlers under a module name; the router dispatches the poll result to the correct handler on completion.
+  </Card>
+  <Card title="End Blocker Processing" icon="clock">
+    Up to `EndBlockerLimit` polls are evaluated per block, checking tally and expiry to drive state transitions automatically.
+  </Card>
+</CardGroup>
+
+## Key Concepts
+
+### PollID
+
+A `PollID` is a unique uint64 identifier assigned to each poll when it is created. It is referenced by voters when submitting their votes.
+
+### Poll States
+
+| State | Description |
+|---|---|
+| `Pending` | Created, accepting votes, threshold not yet reached |
+| `Completed` | Voting threshold reached; the winning `VoteState` is applied |
+| `Failed` | Enough votes cast against the event to reject it |
+| `Expired` | Poll exceeded its block-height deadline without reaching threshold |
+
+### TalliedVote
+
+Each distinct vote payload accumulates power across voters:
+
+```go
+func NewTalliedVote(pollID exported.PollID, data codec.ProtoMarshaler) TalliedVote {
+    d, _ := codectypes.NewAnyWithValue(data)
+    return TalliedVote{
+        PollID: pollID,
+        Tally:  math.ZeroUint(),
+        Data:   d,
+    }
+}
+
+func (m *TalliedVote) TallyVote(voter sdk.ValAddress, votingPower math.Uint, isLate bool) {
+    m.IsVoterLate[voter.String()] = isLate
+    m.Tally = m.Tally.Add(votingPower)
+}
+```
+
+The `isLate` flag marks votes submitted within the grace period after poll expiry; these count toward the tally but the voter may receive reduced rewards.
+
+### VoteRouter
+
+Modules register a handler function identified by module name. When a poll completes, the Vote module calls the appropriate handler:
+
+```go
+// VoteRouter dispatches poll results to module handlers
+type VoteRouter interface {
+    AddHandler(module string, handler exported.VoteHandler) VoteRouter
+    Handler(module string) (exported.VoteHandler, bool)
+}
+```
+
+## Voting Flow
+
+<Steps>
+  <Step title="Poll Created">
+    An external module (e.g., EVM) creates a poll via the Vote keeper when it processes a `confirm-gateway-txs` transaction. The poll is tagged with the confirming module name and relevant event data.
+  </Step>
+  <Step title="Validators Vote">
+    Each validator's vald process observes the poll and submits a vote containing the event data it observed on-chain.
+    ```bash
+    axelard tx vote vote [poll-id] [vote-data] \
+      --from <proxy-key> \
+      --chain-id axelar-dojo-1
+    ```
+  </Step>
+  <Step title="Tally Accumulates">
+    As votes arrive, the module tallies quadratic voting power per distinct vote payload. The threshold is checked after each new vote.
+  </Step>
+  <Step title="Poll Resolves">
+    When the winning payload crosses the `DefaultVotingThreshold`, the poll transitions to `Completed` and the Vote router dispatches the result to the originating module.
+  </Step>
+  <Step title="End Blocker Cleanup">
+    Expired polls are cleaned up by the end blocker (up to `EndBlockerLimit` per block). Failed polls trigger a rejection handler in the originating module.
+  </Step>
+</Steps>
+
+<Note>
+Votes submitted after a poll's deadline but within the `VotingGracePeriod` (configured per-module in the EVM params) are accepted but flagged as late. These votes still count toward the tally and may affect reward distribution.
+</Note>
+
+## Module Parameters
+
+<Accordion title="Vote Parameters">
+  <ParamField path="DefaultVotingThreshold" type="Threshold" required>
+    Default fraction of quadratic voting power required for a poll to be completed. Must be in range `(0, 1]`. Default: `2/3`.
+  </ParamField>
+
+  <ParamField path="EndBlockerLimit" type="int64" required>
+    Maximum number of polls evaluated per block in the end blocker. Must be greater than `0`. Default: `100`.
+  </ParamField>
+</Accordion>
+
+<Info>
+Individual modules (like EVM) can override the voting threshold with a module-specific value. The `DefaultVotingThreshold` is used when no module-specific threshold is configured.
+</Info>
+
+## CLI Reference
+
+### Query Commands
+
+```bash
+# Show vote module parameters
+axelard query vote params
+```
+
+### Transaction Commands
+
+```bash
+# Cast a vote on an open poll
+axelard tx vote vote [poll-id] [vote-data] \
+  --from <proxy-key> \
+  --chain-id axelar-dojo-1
+```
+
+<Tip>
+In normal operations, the `vald` daemon handles vote submission automatically. Manual `axelard tx vote vote` calls are useful for debugging or re-submitting votes if vald missed a poll.
+</Tip>

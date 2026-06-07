@@ -1,0 +1,279 @@
+---
+title: "Configuring Your Axelar Node: app.toml & config.toml"
+sidebarTitle: "Configuration"
+description: "Initialize an Axelar node, tune app.toml and config.toml settings, manage seed peers, configure state sync, and adjust CosmWasm parameters for production."
+---
+
+Every `axelard` node is driven by two primary configuration files — `app.toml` and `config.toml` — that live inside your node's home directory. Before you can edit these files, you must initialize the directory structure with `axelard init`. This page walks through initialization, the most important knobs in each config file, and how to use the `axelard config` tooling to read and write values without manually editing TOML.
+
+## Initializing the Node
+
+`axelard init` creates the home directory structure, generates a node key and a validator private key, and writes default `app.toml`, `config.toml`, and `genesis.json` files.
+
+```bash
+axelard init <moniker> --chain-id axelar-dojo-1
+```
+
+<ParamField path="moniker" type="string" required>
+  A human-readable name for your node displayed on the network's peer list. Choose something descriptive, e.g. `my-validator-1`.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  The chain ID encoded in the genesis file. Use `axelar-dojo-1` for mainnet or `axelar-testnet-lisbon-3` for the Lisbon testnet. Defaults to `axelar` if omitted.
+</ParamField>
+
+<ParamField path="--home" type="string">
+  Override the default home directory. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+After initialization, the layout is:
+
+```
+$HOME/.axelar/
+├── config/
+│   ├── app.toml          # Application-level settings
+│   ├── config.toml       # CometBFT / networking settings
+│   ├── genesis.json      # Chain genesis file
+│   └── node_key.json     # P2P node identity
+├── data/                 # Blockchain state databases
+└── keyring-file/         # Key storage (when using file backend)
+```
+
+<Note>
+  For mainnet and testnet, you must replace the generated `genesis.json` with the official network genesis before starting the node.
+</Note>
+
+## Using axelard config
+
+The `axelard config` subcommands provide a safe, validated way to read and write config file values without a text editor.
+
+### Read a value
+
+```bash
+axelard config get app minimum-gas-prices
+axelard config get config p2p.seeds
+```
+
+The first argument is the config file name (without `.toml`), and the second is the dot-notation key path.
+
+### Write a value
+
+```bash
+axelard config set app minimum-gas-prices "0.007uaxl"
+axelard config set app api.enable true
+axelard config set config p2p.seeds "node-id@host:26656"
+```
+
+Use `--verbose` to log the change to stderr and `--stdout` to print the updated file without writing it:
+
+```bash
+axelard config set app pruning "custom" --verbose
+```
+
+### View and diff
+
+```bash
+axelard config view app          # Print the full app.toml
+axelard config diff app          # Show values that differ from defaults
+```
+
+## app.toml Settings
+
+`~/.axelar/config/app.toml` controls the Cosmos SDK application layer. Below are the settings most relevant to production nodes.
+
+### Minimum Gas Prices
+
+<ParamField path="minimum-gas-prices" type="string">
+  Reject any transaction whose fee falls below this floor. Validators should set this to prevent fee-free spam.
+
+  ```toml
+  minimum-gas-prices = "0.007uaxl"
+  ```
+</ParamField>
+
+### Pruning
+
+Controls how much historical state is retained on disk:
+
+```toml
+pruning = "default"
+# pruning-keep-recent = 362880   # only used when pruning = "custom"
+# pruning-interval = 10          # only used when pruning = "custom"
+```
+
+<ParamField path="pruning" type="string">
+  One of `default`, `nothing`, `everything`, or `custom`.
+
+  | Value | Behaviour |
+  |-------|-----------|
+  | `default` | Keep the last 362 880 states, pruned every 10 blocks |
+  | `nothing` | Keep all historic states (archival node) |
+  | `everything` | Keep only the 2 latest states |
+  | `custom` | Configure manually with `pruning-keep-recent` and `pruning-interval` |
+</ParamField>
+
+### REST API Server
+
+```toml
+[api]
+enable = true
+swagger = false
+address = "tcp://localhost:1317"
+max-open-connections = 1000
+```
+
+<Warning>
+  Enabling `enabled-unsafe-cors = true` allows cross-origin requests from any domain. Only do this behind a reverse proxy that restricts origins.
+</Warning>
+
+### gRPC Server
+
+```toml
+[grpc]
+enable = true
+address = "localhost:9090"
+
+[grpc-web]
+enable = true
+```
+
+### State Sync Snapshots
+
+To allow other nodes to use this node as a state sync provider, enable snapshots:
+
+```toml
+[state-sync]
+snapshot-interval = 1000     # Take a snapshot every 1000 blocks
+snapshot-keep-recent = 2     # Keep the 2 most recent snapshots
+```
+
+### CosmWasm Settings
+
+Axelar Core compiles with CosmWasm enabled by default (`WASM=true`). The relevant tunables in `app.toml`:
+
+```toml
+[wasm]
+# Maximum gas for a wasm query (default 3 000 000)
+query_gas_limit = 3000000
+# In-memory module cache size in MiB (default 100)
+memory_cache_size = 100
+# simulation_gas_limit = ""  # Unbounded by default
+```
+
+The maximum allowed wasm bytecode size is controlled at build time (`MAX_WASM_SIZE`, default 3 MiB) and cannot be changed at runtime.
+
+Supported CosmWasm capabilities baked into the binary:
+
+```
+iterator, staking, stargate, cosmwasm_1_1, cosmwasm_1_2, cosmwasm_1_3
+```
+
+## config.toml Settings
+
+`~/.axelar/config/config.toml` controls the CometBFT consensus engine, P2P networking, and the RPC server.
+
+### Moniker
+
+```toml
+moniker = "my-validator-1"
+```
+
+### P2P Configuration
+
+```toml
+[p2p]
+laddr = "tcp://0.0.0.0:26656"
+external_address = ""          # Set to your public IP:26656 if behind NAT
+seeds = ""                     # Comma-separated ID@host:port seed nodes
+persistent_peers = ""          # Comma-separated ID@host:port persistent peers
+pex = true                     # Enable peer exchange
+```
+
+#### Seed Nodes
+
+Seed nodes introduce your node to the peer-to-peer network. They do not participate in consensus themselves. Add them to `seeds`:
+
+```toml
+seeds = "ade4d8bc8cbe014af6ebdf3cb7b1e9ad36f412c0@seeds.polkachu.com:15156,3d67d0646cddcc203b41434aceea64ade22ba6fc@k8s-mainnet-axelarseed-b6c5a7b6d8-87f80ccd960bb86c.elb.us-east-2.amazonaws.com:26656"
+```
+
+#### Persistent Peers
+
+Peers listed here are always maintained, even after connection drops:
+
+```toml
+persistent_peers = "6e2b10580e6bbcb5b1cb5cbcdd9a3380ba4a9fac@axelar-mainnet-peer.itrocket.net:14656"
+```
+
+### RPC Server
+
+```toml
+[rpc]
+laddr = "tcp://127.0.0.1:26657"
+# Bind to 0.0.0.0:26657 only if this RPC is intentionally public
+```
+
+<Warning>
+  Exposing the RPC port publicly without authentication allows anyone to query the node and broadcast transactions. Use a firewall or reverse proxy to restrict access.
+</Warning>
+
+### State Sync (Syncing from a Snapshot)
+
+To sync quickly from a trusted peer's snapshot instead of replaying all blocks from genesis, configure state sync in `config.toml`:
+
+```toml
+[statesync]
+enable = true
+rpc_servers = "https://axelar-rpc.polkachu.com:443,https://axelar-rpc.polkachu.com:443"
+trust_height = 12345678
+trust_hash = "ABCDEF1234567890..."
+trust_period = "168h0m0s"
+```
+
+<Steps>
+  <Step title="Find a trusted block height and hash">
+    Query a public RPC endpoint for a recent block:
+
+    ```bash
+    curl -s https://axelar-rpc.polkachu.com/block | jq '.result.block.header | {height, hash: .last_block_id.hash}'
+    ```
+  </Step>
+
+  <Step title="Set trust_height and trust_hash">
+    Paste the returned height and hash into `config.toml` under `[statesync]`.
+  </Step>
+
+  <Step title="Set rpc_servers">
+    Provide at least two distinct RPC servers so the node can cross-verify the snapshot.
+  </Step>
+
+  <Step title="Start the node">
+    ```bash
+    axelard start --home ~/.axelar
+    ```
+
+    The node will download and apply the snapshot before resuming normal sync.
+  </Step>
+</Steps>
+
+### Consensus Tuning
+
+```toml
+[consensus]
+create_empty_blocks = true
+create_empty_blocks_interval = "0s"
+# Set to false to reduce chain bloat at the cost of higher block latency
+```
+
+## vald.toml
+
+Validator nodes also use a third config file, `~/.axelar/config/vald.toml`, for the external `vald` process. See the [Vald](/node/vald) page for full documentation of its fields.
+
+## Configuration Precedence
+
+Settings can come from multiple sources. The order of precedence (highest wins) is:
+
+1. CLI flags passed to `axelard start`
+2. Environment variables (e.g. `AXELARD_MINIMUM_GAS_PRICES`)
+3. `app.toml` / `config.toml` file values
+4. Built-in defaults

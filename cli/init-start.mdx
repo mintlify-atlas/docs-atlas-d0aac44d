@@ -1,0 +1,521 @@
+---
+title: "axelard Node Commands: Init, Start, and Operations"
+sidebarTitle: "Node Commands"
+description: "Reference for axelard node lifecycle commands: init, start, status, health-check, rollback, prune, comet subcommands, snapshots, and vald-start."
+---
+
+This page covers every command involved in the lifecycle of an Axelar node — from first-time initialization through day-to-day operation, maintenance, and the validator daemon. All commands inherit the [global flags](/cli/overview#global-flags) (`--home`, `--log_level`, `--log_format`, `--trace`, `--output`).
+
+---
+
+## `axelard init`
+
+Generates the initial configuration files for a new node: the private validator key (`priv_validator_key.json`), node key (`node_key.json`), genesis file (`genesis.json`), and application configuration (`app.toml`, `config.toml`).
+
+```bash
+axelard init <moniker> [flags]
+```
+
+**Example:**
+
+```bash
+axelard init my-validator \
+  --chain-id axelar-dojo-1 \
+  --home ~/.axelar
+```
+
+<ParamField path="moniker" type="string" required>
+  A human-readable name for this node, displayed in the P2P network.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  Genesis file chain ID. Defaults to `axelar`. Must match the network you intend to join.
+</ParamField>
+
+<ParamField path="--home" type="string">
+  Node's home directory. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+<ParamField path="--overwrite" type="boolean">
+  Overwrite an existing `genesis.json` if present. Short form: `-o`.
+</ParamField>
+
+<ParamField path="--recover" type="boolean">
+  Provide a seed phrase to recover an existing key rather than generating a new one.
+</ParamField>
+
+<ParamField path="--initial-height" type="integer">
+  Specify the initial block height at genesis. Defaults to `1`.
+</ParamField>
+
+<ParamField path="--default-denom" type="string">
+  Default coin denomination in the genesis file. Defaults to `stake`.
+</ParamField>
+
+<Note>
+  After `init`, replace the generated `genesis.json` with the official network genesis file before starting the node for the first time.
+</Note>
+
+---
+
+## `axelard start`
+
+Runs the full Axelar node application with CometBFT embedded in-process. This is the primary command for operating a live node.
+
+```bash
+axelard start [flags]
+```
+
+**Example (mainnet validator):**
+
+```bash
+axelard start \
+  --home ~/.axelar \
+  --p2p.laddr tcp://0.0.0.0:26656 \
+  --rpc.laddr tcp://127.0.0.1:26657 \
+  --grpc.address localhost:9090 \
+  --minimum-gas-prices 0.007uaxl \
+  --log_level info
+```
+
+### Networking Flags
+
+<ParamField path="--p2p.laddr" type="string">
+  P2P listen address. Defaults to `tcp://0.0.0.0:26656`.
+</ParamField>
+
+<ParamField path="--p2p.seeds" type="string">
+  Comma-delimited `ID@host:port` seed nodes for peer discovery.
+</ParamField>
+
+<ParamField path="--p2p.persistent_peers" type="string">
+  Comma-delimited `ID@host:port` peers to maintain persistent connections with.
+</ParamField>
+
+<ParamField path="--p2p.external-address" type="string">
+  Public `ip:port` address advertised to peers for inbound connections.
+</ParamField>
+
+<ParamField path="--rpc.laddr" type="string">
+  CometBFT RPC listen address. Defaults to `tcp://127.0.0.1:26657`.
+</ParamField>
+
+<ParamField path="--grpc.address" type="string">
+  gRPC server listen address. Defaults to `localhost:9090`.
+</ParamField>
+
+<ParamField path="--grpc.enable" type="boolean">
+  Enable the gRPC server. Defaults to `true`.
+</ParamField>
+
+<ParamField path="--api.address" type="string">
+  REST API server listen address. Defaults to `tcp://localhost:1317`.
+</ParamField>
+
+<ParamField path="--api.enable" type="boolean">
+  Enable the REST API server. Disabled by default.
+</ParamField>
+
+### Pruning Flags
+
+<ParamField path="--pruning" type="string">
+  Pruning strategy. Options: `default` (last 362,880 states), `nothing` (archive), `everything` (2 latest states), or `custom`. Defaults to `default`.
+</ParamField>
+
+<ParamField path="--pruning-keep-recent" type="uint">
+  Number of recent heights to keep when using `custom` pruning.
+</ParamField>
+
+<ParamField path="--pruning-interval" type="uint">
+  Block interval at which pruned heights are removed from disk (`custom` only).
+</ParamField>
+
+### Operational Flags
+
+<ParamField path="--home" type="string">
+  Application home directory. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+<ParamField path="--minimum-gas-prices" type="string">
+  Minimum gas prices for accepting transactions (e.g., `0.007uaxl`). Transactions with lower fees are rejected.
+</ParamField>
+
+<ParamField path="--halt-height" type="uint">
+  Block height at which to gracefully halt the node. The block at this height will not be committed.
+</ParamField>
+
+<ParamField path="--halt-time" type="uint">
+  Unix timestamp (seconds) at which to gracefully halt the node.
+</ParamField>
+
+<ParamField path="--cpu-profile" type="string">
+  File path for CPU profiling output (pprof format).
+</ParamField>
+
+<ParamField path="--inv-check-period" type="uint">
+  Assert registered module invariants every N blocks. `0` disables checks.
+</ParamField>
+
+<ParamField path="--unsafe-skip-upgrades" type="ints">
+  Comma-separated block heights to skip upgrade handlers (allows running old binary past upgrade height).
+</ParamField>
+
+<ParamField path="--x-crisis-skip-assert-invariants" type="boolean">
+  Skip invariant assertions at startup (speeds up node start on large state).
+</ParamField>
+
+<ParamField path="--grpc-only" type="boolean">
+  Start in query-only mode (gRPC and REST only, no CometBFT process). Useful for running a legacy query endpoint post-upgrade.
+</ParamField>
+
+<ParamField path="--state-sync.snapshot-interval" type="uint">
+  Produce state-sync snapshots every N blocks. `0` disables snapshots.
+</ParamField>
+
+<ParamField path="--state-sync.snapshot-keep-recent" type="uint32">
+  Number of recent snapshots to retain. Defaults to `2`.
+</ParamField>
+
+---
+
+## `axelard status`
+
+Queries the CometBFT RPC endpoint and returns the node's current status, including block height, sync state, and validator public key.
+
+```bash
+axelard status [flags]
+axelard status --node tcp://my-node:26657 --output json
+```
+
+<ParamField path="--node" type="string">
+  RPC endpoint to query. Short form: `-n`. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="--output" type="string">
+  Output format: `text` or `json`. Short form: `-o`. Defaults to `json`.
+</ParamField>
+
+<Tip>
+  Pipe output through `jq` to extract specific fields:
+
+  ```bash
+  axelard status | jq '.SyncInfo | {height: .latest_block_height, catching_up}'
+  ```
+</Tip>
+
+---
+
+## `axelard health-check`
+
+Checks whether the node and its supporting services (broadcaster account and TSS daemon) are ready. Useful in readiness probe scripts for validator operations.
+
+```bash
+axelard health-check \
+  --operator-addr axelarvaloper1... \
+  --node tcp://localhost:26657 \
+  --tofnd-host localhost \
+  --tofnd-port 50051
+```
+
+<ParamField path="--operator-addr" type="string">
+  The operator's validator address (`axelarvaloper1…`) to check registration status.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  CometBFT RPC address. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="--tofnd-host" type="string">
+  Hostname of the TSS daemon. Defaults to `localhost`.
+</ParamField>
+
+<ParamField path="--tofnd-port" type="string">
+  Port of the TSS daemon. Defaults to `50051`.
+</ParamField>
+
+<ParamField path="--skip-broadcaster" type="boolean">
+  Skip the broadcaster account balance check.
+</ParamField>
+
+<ParamField path="--skip-operator" type="boolean">
+  Skip the operator registration check.
+</ParamField>
+
+<ParamField path="--skip-tofnd" type="boolean">
+  Skip TSS daemon reachability check.
+</ParamField>
+
+---
+
+## `axelard rollback`
+
+Rolls back Cosmos SDK and CometBFT state by exactly one block height. Used to recover from an incorrect application state transition where CometBFT has persisted an incorrect app hash. After rollback, restarting the node will re-execute the transactions in the rolled-back block.
+
+```bash
+axelard rollback [flags]
+axelard rollback --home ~/.axelar
+```
+
+<ParamField path="--home" type="string">
+  Application home directory. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+<ParamField path="--hard" type="boolean">
+  Remove the last block as well as the state (more aggressive rollback).
+</ParamField>
+
+<Warning>
+  Rollback does not remove blocks from the block store — it only rewinds the application state. Upon restart, the rolled-back block's transactions will be re-applied.
+</Warning>
+
+---
+
+## `axelard prune`
+
+Prunes historical application state from disk, keeping only recent heights. Run this on a stopped node to reclaim disk space without starting a full archive resync.
+
+```bash
+axelard prune [pruning-method] [flags]
+```
+
+**Pruning methods:**
+
+| Method | Behaviour |
+|---|---|
+| `default` | Keep the last 362,880 states |
+| `nothing` | Retain all historical state (archive node) |
+| `everything` | Keep only the 2 most recent states |
+| `custom` | Manually specify `--pruning-keep-recent` |
+
+**Example:**
+
+```bash
+axelard prune custom \
+  --pruning-keep-recent 100 \
+  --app-db-backend goleveldb \
+  --home ~/.axelar
+```
+
+<ParamField path="--pruning-keep-recent" type="uint">
+  Number of recent heights to retain when using `custom` pruning.
+</ParamField>
+
+<ParamField path="--app-db-backend" type="string">
+  Database backend type: `goleveldb`, `rocksdb`, or `pebbledb`. Defaults to `goleveldb`.
+</ParamField>
+
+<ParamField path="--home" type="string">
+  Application home directory. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+---
+
+## `axelard comet`
+
+CometBFT utility subcommands for inspecting and managing the consensus layer.
+
+```bash
+axelard comet <subcommand> [flags]
+```
+
+<AccordionGroup>
+  <Accordion title="show-node-id — Print the node's P2P ID">
+    Prints the node's unique P2P identifier, derived from the `node_key.json` file. Share this ID with peers to allow them to connect directly.
+
+    ```bash
+    axelard comet show-node-id
+    ```
+  </Accordion>
+
+  <Accordion title="show-validator — Print validator consensus public key">
+    Displays the CometBFT validator consensus public key in JSON format. This is the key used for block signing and is distinct from the operator key.
+
+    ```bash
+    axelard comet show-validator
+    ```
+  </Accordion>
+
+  <Accordion title="show-address — Print consensus address">
+    Shows this node's CometBFT validator consensus address (the `axelarvalcons1…` address).
+
+    ```bash
+    axelard comet show-address
+    ```
+  </Accordion>
+
+  <Accordion title="version — Print CometBFT version">
+    Prints the version of the CometBFT library compiled into this binary.
+
+    ```bash
+    axelard comet version
+    ```
+  </Accordion>
+
+  <Accordion title="unsafe-reset-all — Wipe all CometBFT data">
+    Removes all CometBFT data (block store, state, and WAL) and resets the validator state to genesis. The `--keep-addr-book` flag preserves the peer address book.
+
+    ```bash
+    axelard comet unsafe-reset-all [--keep-addr-book]
+    ```
+
+    <Warning>
+      This is a **destructive** operation. All CometBFT state is permanently deleted. Only use this if you intend to resync from genesis or a snapshot.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="bootstrap-state — Bootstrap state via light client">
+    Bootstraps CometBFT state at an arbitrary block height using a light client. Useful for state-sync setups.
+
+    ```bash
+    axelard comet bootstrap-state
+    ```
+  </Accordion>
+
+  <Accordion title="reset-state — Remove all data and WAL">
+    Removes all CometBFT data and the write-ahead log without resetting the validator key.
+
+    ```bash
+    axelard comet reset-state
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## `axelard snapshots`
+
+Manages local application state snapshots. Snapshots enable state-sync, allowing other nodes to quickly bootstrap by downloading a verified state snapshot instead of replaying all blocks from genesis.
+
+```bash
+axelard snapshots <subcommand> [flags]
+```
+
+<AccordionGroup>
+  <Accordion title="list — List available local snapshots">
+    Displays all snapshots stored in the local snapshot store, showing height and format.
+
+    ```bash
+    axelard snapshots list
+    ```
+  </Accordion>
+
+  <Accordion title="export — Export current app state as a snapshot">
+    Exports the application state at a given height (defaulting to the latest) into the local snapshot store.
+
+    ```bash
+    axelard snapshots export
+    axelard snapshots export --height 12345678
+    ```
+
+    <ParamField path="--height" type="int">
+      Block height to export. Defaults to the latest committed height.
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="dump — Dump snapshot to a portable archive">
+    Writes a snapshot from the local store to a portable `.tar.gz` archive file for transfer or backup.
+
+    ```bash
+    axelard snapshots dump <height> <format> --output snapshot.tar.gz
+    ```
+
+    <ParamField path="--output" type="string">
+      Output file path. Short form: `-o`.
+    </ParamField>
+  </Accordion>
+
+  <Accordion title="load — Load a snapshot archive into the store">
+    Imports a `.tar.gz` snapshot archive into the local snapshot store.
+
+    ```bash
+    axelard snapshots load snapshot.tar.gz
+    ```
+  </Accordion>
+
+  <Accordion title="restore — Restore app state from a local snapshot">
+    Restores the application state from a snapshot already present in the local store.
+
+    ```bash
+    axelard snapshots restore <height> <format>
+    ```
+  </Accordion>
+
+  <Accordion title="delete — Delete a local snapshot">
+    Removes a specific snapshot (identified by height and format) from the local snapshot store.
+
+    ```bash
+    axelard snapshots delete <height> <format>
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## `axelard vald-start`
+
+Starts the Axelar validator daemon (vald). Vald watches external chains for cross-chain events and participates in threshold signing rounds via the `tofnd` TSS sidecar. It must be run alongside a fully synced `axelard start` process.
+
+```bash
+axelard vald-start [flags]
+```
+
+**Example:**
+
+```bash
+axelard vald-start \
+  --validator-addr axelarvaloper1... \
+  --from broadcaster \
+  --tofnd-host localhost \
+  --tofnd-port 50051 \
+  --chain-id axelar-dojo-1 \
+  --node tcp://localhost:26657 \
+  --keyring-backend file
+```
+
+<ParamField path="--validator-addr" type="string">
+  The validator operator address (`axelarvaloper1…`) that vald will act on behalf of.
+</ParamField>
+
+<ParamField path="--from" type="string">
+  Key name or address of the broadcaster account used to sign and submit transactions.
+</ParamField>
+
+<ParamField path="--tofnd-host" type="string">
+  Hostname of the `tofnd` TSS daemon. Defaults to `localhost`.
+</ParamField>
+
+<ParamField path="--tofnd-port" type="string">
+  Port of the `tofnd` TSS daemon. Defaults to `50051`.
+</ParamField>
+
+<ParamField path="--tofnd-dial-timeout" type="string">
+  Dial timeout when connecting to `tofnd`. Defaults to `15s`.
+</ParamField>
+
+<ParamField path="--chain-id" type="string">
+  The network chain ID. Defaults to `axelar`.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  CometBFT RPC endpoint. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="--keyring-backend" type="string">
+  Keyring backend for the broadcaster key. Defaults to `file`.
+</ParamField>
+
+<ParamField path="--gas-prices" type="string">
+  Gas price for submitted transactions. Defaults to `0.007uaxl`.
+</ParamField>
+
+<ParamField path="--gas-adjustment" type="float">
+  Multiplier applied to estimated gas. Defaults to `4`.
+</ParamField>
+
+<ParamField path="--broadcast-mode" type="string">
+  Transaction broadcasting mode: `sync` or `async`. Defaults to `sync`.
+</ParamField>
+
+<Info>
+  Vald must be restarted whenever the underlying node restarts. Consider using a process supervisor (e.g., `systemd` or `supervisord`) that starts vald only after the node RPC endpoint becomes available.
+</Info>

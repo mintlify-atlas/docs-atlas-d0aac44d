@@ -1,0 +1,210 @@
+---
+title: "Building Axelar Core: Static, Dynamic & Docker"
+sidebarTitle: "Building"
+description: "Compile the axelard binary from source using static linking, dynamic linking, or Docker images. Includes smart contract bytecode setup and GPG signature verification."
+---
+
+Building `axelard` from source gives you full control over the binary you run. The Axelar Core repository supports three build paths: a statically linked binary (recommended for production), a dynamically linked binary for local development, and Docker images for containerized deployments. Before building, you must also supply gateway smart contract bytecode from the `axelar-cgp-solidity` releases.
+
+## Prerequisites
+
+<CardGroup cols={2}>
+  <Card title="Go 1.25+" icon="golang">
+    Required for all build paths. The `go.mod` declares `go 1.25`. Download from [go.dev](https://go.dev/dl/).
+  </Card>
+  <Card title="Docker" icon="docker">
+    Required for the static build. The `make build-static` target extracts the binary from an Alpine-based image.
+  </Card>
+  <Card title="gcc / glibc" icon="c">
+    Required for the dynamic `make build` path. The resulting binary is tied to your system's glibc version.
+  </Card>
+  <Card title="make" icon="hammer">
+    GNU Make drives all build targets. Ensure `make` is on your `PATH` along with standard build tools.
+  </Card>
+</CardGroup>
+
+<Note>
+  For a release build, check out the release tag first:
+
+  ```bash
+  git checkout vX.Y.Z
+  ```
+</Note>
+
+## Smart Contract Bytecode Dependency
+
+Axelar Core embeds bytecode from the Axelar gateway smart contracts at compile time. You must supply this before running `make generate` or any build target that triggers code generation.
+
+<Steps>
+  <Step title="Find the required contract version">
+    Inspect `contract-version.json` at the root of the repository to learn which release you need:
+
+    ```bash
+    cat contract-version.json
+    # {"gateway":"v6.1.0"}
+    ```
+  </Step>
+
+  <Step title="Download from axelar-cgp-solidity releases">
+    Go to the [axelar-cgp-solidity releases page](https://github.com/axelarnetwork/axelar-cgp-solidity/releases) and download the matching `Bytecode-vX.Y.Z` archive. For example:
+
+    ```bash
+    wget https://github.com/axelarnetwork/axelar-cgp-solidity/releases/download/v6.1.0/Bytecode-v6.1.0.zip
+    ```
+  </Step>
+
+  <Step title="Unzip into contract-artifacts/">
+    ```bash
+    unzip Bytecode-v6.1.0.zip -d contract-artifacts/
+    ```
+  </Step>
+
+  <Step title="Generate the contracts Go file">
+    ```bash
+    make generate
+    ```
+
+    This runs `go generate ./...` and produces `x/evm/types/contracts.go` from the JSON artifacts.
+  </Step>
+</Steps>
+
+## Static Build (Recommended)
+
+The static build produces a fully self-contained Linux binary with no runtime dependencies on glibc. It uses an Alpine Linux Docker image that links against musl libc and the static CosmWasm VM library (`libwasmvm_muslc.a`). The resulting binary runs on any Linux distribution.
+
+```bash
+make build-static
+```
+
+This target:
+1. Builds the `axelar/core` Docker image (Alpine-based, with musl libc).
+2. Creates a temporary container named `axelar-extract`.
+3. Copies `/usr/local/bin/axelard` out of the container into `./bin/axelard`.
+4. Removes the temporary container.
+
+```bash
+# Optional overrides
+make build-static WASM=false          # Build without CosmWasm support
+make build-static IBC_WASM_HOOKS=true # Enable IBC Wasm hooks
+```
+
+<Tip>
+  After the build completes, confirm the binary is statically linked:
+
+  ```bash
+  file ./bin/axelard
+  # axelard: ELF 64-bit LSB executable, x86-64, statically linked
+  ```
+</Tip>
+
+## Dynamic Build
+
+The dynamic build links against your host system's glibc. It is faster than the static build because it skips the Docker step, but the binary may not run on systems with a different glibc version.
+
+```bash
+make build
+```
+
+The binary is placed at `./bin/axelard`. This target sets `CGO_ENABLED=1` and uses the `ledger` build tag by default.
+
+<Warning>
+  A binary built on Ubuntu 22.04 will not run on Alpine Linux or older glibc versions. For portable production binaries, prefer `make build-static`.
+</Warning>
+
+## Build Tags
+
+The Makefile controls build tags through the `BUILD_TAGS` variable:
+
+| Tag | Purpose |
+|-----|---------|
+| `ledger` | Enables Ledger hardware wallet support via HID. Always included. |
+| `muslc` | Enables static linking against musl libc. Automatically set when `MUSLC=true`. |
+
+When `MUSLC=true` (set automatically during the static build), the linker flags include:
+
+```bash
+-linkmode=external -extldflags '-Wl,-z,muldefs -static'
+```
+
+## Docker Images
+
+### Release Image
+
+```bash
+make docker-image
+```
+
+Creates `axelar/core:latest` — the same Alpine-based image used by `make build-static`. Build arguments:
+
+```bash
+make docker-image WASM=true IBC_WASM_HOOKS=false ARCH=x86_64
+```
+
+### Debug Image
+
+```bash
+make docker-image-debug
+```
+
+Creates `axelar/core-debug:latest` using `Dockerfile.debug`. This image bundles [delve](https://github.com/go-delve/delve) so a remote debugger can be attached to a running node.
+
+### Multi-arch Builds
+
+```bash
+make build-push-docker-images SEMVER=v0.35.0 PLATFORM=linux/amd64
+```
+
+Uses `docker buildx` to cross-compile and optionally push images. Set `PUSH_DOCKER_IMAGE=false` to build without pushing.
+
+## Downloading and Verifying a Release Binary
+
+If you prefer to download a pre-built binary from the [Axelar Core releases page](https://github.com/axelarnetwork/axelar-core/releases) rather than building from source, verify its GPG signature before use.
+
+<Steps>
+  <Step title="Download the binary and signature">
+    From the releases page, download both `axelard-<os>-<arch>-vX.Y.Z` and its companion `.asc` file.
+  </Step>
+
+  <Step title="Import Axelar's public key">
+    ```bash
+    curl https://keybase.io/axelardev/pgp_keys.asc | gpg --import
+    ```
+  </Step>
+
+  <Step title="Trust the imported key">
+    ```bash
+    gpg --edit-key 5D9FFADEED11FA5D
+    ```
+
+    At the `gpg>` prompt, type `trust`, select option `5` (ultimate trust), then `quit`.
+  </Step>
+
+  <Step title="Verify the binary signature">
+    ```bash
+    gpg --verify axelard-linux-amd64-v0.35.0.asc axelard-linux-amd64-v0.35.0
+    ```
+
+    A successful verification prints:
+
+    ```
+    Good signature from "Axelar Network Devs <eng@axelar.network>" [ultimate]
+    ```
+  </Step>
+
+  <Step title="Make the binary executable">
+    ```bash
+    chmod +x axelard-linux-amd64-v0.35.0
+    mv axelard-linux-amd64-v0.35.0 /usr/local/bin/axelard
+    ```
+  </Step>
+</Steps>
+
+## Developer Tooling
+
+Install code generation prerequisites required by `make generate`:
+
+```bash
+make prereqs
+```
+
+This installs `goimports`, `stringer`, `moq`, `statik`, `golangci-lint`, and `mdformat`. Ensure `$(go env GOPATH)/bin` is on your `PATH`.

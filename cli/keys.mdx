@@ -1,0 +1,395 @@
+---
+title: "axelard keys: Cryptographic Key Management Reference"
+sidebarTitle: "Key Management"
+description: "Full reference for axelard keys subcommands — create, recover, list, show, export, import, delete, rename, and convert cryptographic keys."
+---
+
+The `axelard keys` command group manages cryptographic keys stored in a local keyring. These keys are used to sign transactions, operate validators, and construct multisig accounts. The keyring supports multiple storage backends, each with different security trade-offs.
+
+```bash
+axelard keys [subcommand] [flags]
+```
+
+---
+
+## Keyring Backends
+
+All `keys` subcommands accept a `--keyring-backend` flag that selects how private key material is stored and protected on the local machine.
+
+| Backend | Description |
+|---|---|
+| `os` | Uses the operating system's native credential store (Keychain on macOS, SecretService on Linux). Recommended for production. |
+| `file` | Encrypted file in the app's home directory. Prompts for a passphrase on each access. The default backend. |
+| `kwallet` | KDE Wallet Manager (Linux only). Requires `kwallet` to be running. |
+| `pass` | Uses the `pass` CLI tool backed by GnuPG. Requires `pass` and `gpg` to be installed. |
+| `test` | Unencrypted on-disk storage. **Never use in production.** For automated testing only. |
+| `memory` | In-memory only. Keys are lost when the process exits. |
+
+<Warning>
+  The `test` and `memory` backends store key material without encryption. Use them only in sandboxed test environments where security is not a concern.
+</Warning>
+
+---
+
+## `axelard keys add`
+
+Generates a new private key (or recovers an existing one from a mnemonic) and stores it in the keyring under the given name.
+
+```bash
+axelard keys add <name> [flags]
+```
+
+**Generate a new key:**
+
+```bash
+axelard keys add mykey --keyring-backend file
+```
+
+**Recover from mnemonic:**
+
+```bash
+axelard keys add mykey --recover --keyring-backend file
+```
+
+**Create a multisig key:**
+
+```bash
+axelard keys add mymultisig \
+  --multisig "key1,key2,key3" \
+  --multisig-threshold 2
+```
+
+<ParamField path="name" type="string" required>
+  Name to assign to the key in the keyring.
+</ParamField>
+
+<ParamField path="--recover" type="boolean">
+  Prompt for a BIP39 mnemonic seed phrase to recover an existing key instead of generating a new one.
+</ParamField>
+
+<ParamField path="--source" type="string">
+  Path to a file containing the mnemonic (used with `--recover` or `--interactive`).
+</ParamField>
+
+<ParamField path="--multisig" type="string">
+  Comma-separated list of key names already in the keyring to form a legacy multisig public key.
+</ParamField>
+
+<ParamField path="--multisig-threshold" type="integer">
+  Minimum number of signatures required for the multisig key. Defaults to `1`.
+</ParamField>
+
+<ParamField path="--nosort" type="boolean">
+  When set, multisig keys are used in the exact order provided rather than sorted by address.
+</ParamField>
+
+<ParamField path="--coin-type" type="uint32">
+  BIP44 coin type for HD key derivation. Defaults to `118` (Cosmos).
+</ParamField>
+
+<ParamField path="--account" type="uint32">
+  BIP44 account number for HD derivation. Max `2147483647`.
+</ParamField>
+
+<ParamField path="--index" type="uint32">
+  BIP44 address index for HD derivation. Max `2147483647`.
+</ParamField>
+
+<ParamField path="--hd-path" type="string">
+  Manual BIP32 derivation path, overriding the BIP44 config.
+</ParamField>
+
+<ParamField path="--key-type" type="string">
+  Key signing algorithm: `secp256k1` (default) or `ed25519`.
+</ParamField>
+
+<ParamField path="--ledger" type="boolean">
+  Store only a reference to a private key held on a connected Ledger hardware device.
+</ParamField>
+
+<ParamField path="--dry-run" type="boolean">
+  Generate (or recover) the key without writing it to the keyring.
+</ParamField>
+
+<ParamField path="--no-backup" type="boolean">
+  Suppress printing the seed phrase to the terminal (useful when other people may see the screen).
+</ParamField>
+
+<ParamField path="--interactive" type="boolean">
+  Interactively prompt for BIP44 path, BIP39 mnemonic, and passphrase. Short form: `-i`.
+</ParamField>
+
+<ParamField path="--pubkey" type="string">
+  Import an arbitrary public key in JSON format. No private key will be stored.
+</ParamField>
+
+<Tip>
+  Always record your mnemonic seed phrase in a secure, offline location immediately after generating a key. The mnemonic is displayed only once and cannot be recovered from the keyring.
+</Tip>
+
+---
+
+## `axelard keys list`
+
+Lists all public keys stored in the keyring, along with their associated name, type, and address.
+
+```bash
+axelard keys list [flags]
+axelard keys list --keyring-backend file
+axelard keys list --list-names   # Print names only
+```
+
+<ParamField path="--list-names" type="boolean">
+  Output only key names, one per line. Short form: `-n`.
+</ParamField>
+
+<ParamField path="--output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+---
+
+## `axelard keys show`
+
+Retrieves and displays information about one or more keys by name or address. When multiple keys are provided, an ephemeral multisig key named `multi` is constructed.
+
+```bash
+axelard keys show <name_or_address> [name_or_address...] [flags]
+```
+
+**Examples:**
+
+```bash
+# Show full key info
+axelard keys show mykey
+
+# Print only the address
+axelard keys show mykey --address
+
+# Print only the public key
+axelard keys show mykey --pubkey
+
+# Show validator bech32 address
+axelard keys show mykey --bech val
+
+# Build an ephemeral multisig view
+axelard keys show key1 key2 key3 --multisig-threshold 2
+```
+
+<ParamField path="--address" type="boolean">
+  Output only the bech32 address. Cannot be combined with `--output`. Short form: `-a`.
+</ParamField>
+
+<ParamField path="--pubkey" type="boolean">
+  Output only the public key. Cannot be combined with `--output`. Short form: `-p`.
+</ParamField>
+
+<ParamField path="--bech" type="string">
+  Bech32 prefix encoding: `acc` (account), `val` (validator operator), or `cons` (consensus). Defaults to `acc`.
+</ParamField>
+
+<ParamField path="--multisig-threshold" type="integer">
+  When multiple key names are provided, sets the signing threshold for the constructed multisig view. Defaults to `1`.
+</ParamField>
+
+<ParamField path="--device" type="boolean">
+  Output the address on a connected Ledger device display. Cannot be combined with `--pubkey`. Short form: `-d`.
+</ParamField>
+
+---
+
+## `axelard keys delete`
+
+Removes one or more keys from the keyring by name.
+
+```bash
+axelard keys delete <name>... [flags]
+```
+
+**Example:**
+
+```bash
+axelard keys delete oldkey --keyring-backend file
+```
+
+<ParamField path="--yes" type="boolean">
+  Skip the confirmation prompt when deleting offline or Ledger key references. Defaults to `true`. Short form: `-y`.
+</ParamField>
+
+<ParamField path="--force" type="boolean">
+  Remove the key unconditionally without requiring a passphrase. *Deprecated.* Short form: `-f`.
+</ParamField>
+
+<Note>
+  Deleting a Ledger key reference only removes the local public key reference — the private key on the hardware device is unaffected.
+</Note>
+
+---
+
+## `axelard keys export`
+
+Exports a private key from the keyring as an ASCII-armored encrypted string (PEM format). The exported string can be re-imported with `axelard keys import`.
+
+```bash
+axelard keys export <name> [flags]
+```
+
+**Standard export (ASCII armor):**
+
+```bash
+axelard keys export mykey > mykey.pem
+```
+
+**Unarmored hex export (advanced users only):**
+
+```bash
+axelard keys export mykey --unsafe --unarmored-hex
+```
+
+<ParamField path="--unarmored-hex" type="boolean">
+  Export the raw private key bytes as a hexadecimal string. Requires `--unsafe`.
+</ParamField>
+
+<ParamField path="--unsafe" type="boolean">
+  Enable unsafe operations. Required when using `--unarmored-hex`.
+</ParamField>
+
+<Warning>
+  Exporting with `--unsafe --unarmored-hex` produces a plaintext private key. Handle with extreme care — anyone who obtains this string can fully control the associated account.
+</Warning>
+
+---
+
+## `axelard keys import`
+
+Imports an ASCII-armored private key file (previously exported with `axelard keys export`) into the local keyring.
+
+```bash
+axelard keys import <name> <keyfile> [flags]
+```
+
+**Example:**
+
+```bash
+axelard keys import mykey mykey.pem --keyring-backend file
+```
+
+<ParamField path="name" type="string" required>
+  Name to assign to the imported key in the keyring.
+</ParamField>
+
+<ParamField path="keyfile" type="string" required>
+  Path to the ASCII-armored PEM file exported by `axelard keys export`.
+</ParamField>
+
+---
+
+## `axelard keys import-hex`
+
+Imports a private key encoded as a raw hexadecimal string into the local keyring.
+
+```bash
+axelard keys import-hex <name> <hex> [flags]
+```
+
+**Example:**
+
+```bash
+axelard keys import-hex mykey 3a2b1c... --key-type secp256k1
+```
+
+<ParamField path="name" type="string" required>
+  Name to assign to the imported key.
+</ParamField>
+
+<ParamField path="hex" type="string" required>
+  Hex-encoded private key bytes.
+</ParamField>
+
+<ParamField path="--key-type" type="string">
+  Signing algorithm of the key: `secp256k1` (default) or `ed25519`. Run `axelard keys list-key-types` for all supported types.
+</ParamField>
+
+---
+
+## `axelard keys mnemonic`
+
+Generates a fresh BIP39 mnemonic phrase (seed phrase) from system entropy. Useful for generating a mnemonic to later use with `--recover`.
+
+```bash
+axelard keys mnemonic [flags]
+```
+
+<ParamField path="--unsafe-entropy" type="boolean">
+  Prompts the user to supply their own entropy instead of reading from the system. For advanced users who want to provide custom randomness.
+</ParamField>
+
+<Note>
+  This command generates a mnemonic but does not create or save a key. Use `axelard keys add --recover` to derive and store a key from the mnemonic.
+</Note>
+
+---
+
+## `axelard keys parse`
+
+Converts an address or public key between hexadecimal and bech32 encoding formats, printing all variant representations.
+
+```bash
+axelard keys parse <hex-or-bech32-address> [flags]
+```
+
+**Examples:**
+
+```bash
+# Convert bech32 to hex
+axelard keys parse axelar1abc...
+
+# Convert hex to bech32
+axelard keys parse deadbeef...
+```
+
+---
+
+## `axelard keys rename`
+
+Renames an existing key in the keyring.
+
+```bash
+axelard keys rename <old_name> <new_name> [flags]
+```
+
+**Example:**
+
+```bash
+axelard keys rename mykey my-validator-key
+```
+
+<ParamField path="--yes" type="boolean">
+  Skip confirmation prompt when renaming offline or Ledger key references. Defaults to `true`. Short form: `-y`.
+</ParamField>
+
+<Note>
+  Renaming a Ledger key reference only renames the local public key record — the private key on the hardware device is unchanged.
+</Note>
+
+---
+
+## Common Inherited Flags
+
+All `axelard keys` subcommands accept these parent flags:
+
+<ParamField path="--keyring-backend" type="string">
+  Select keyring backend: `os`, `file`, `kwallet`, `pass`, `test`, or `memory`. Defaults to `file`.
+</ParamField>
+
+<ParamField path="--keyring-dir" type="string">
+  Override the keyring directory. Defaults to the app's `--home` directory.
+</ParamField>
+
+<ParamField path="--home" type="string">
+  App home directory. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+<ParamField path="--output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>

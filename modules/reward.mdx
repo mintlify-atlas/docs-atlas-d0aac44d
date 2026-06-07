@@ -1,0 +1,149 @@
+---
+title: "Reward Module: Validator Inflation Rewards on Axelar"
+sidebarTitle: "Reward"
+description: "The Reward module distributes inflation-based rewards to validators for maintaining external chains and participating in key management, with configurable rates for each activity."
+---
+
+The Reward module allocates a portion of Axelar's block inflation to validators who perform cross-chain work. Validators earn rewards in two categories: **external chain voting** rewards for participating in EVM event confirmation polls, and **key management** rewards for participating in multisig keygen and signing sessions. These incentives are critical for ensuring that validators remain engaged with the operational duties that secure Axelar's cross-chain infrastructure.
+
+<CardGroup cols={2}>
+  <Card title="External Chain Voting Rewards" icon="chart-bar">
+    Validators earn inflation rewards proportional to their correct participation in EVM event voting polls across maintained chains.
+  </Card>
+  <Card title="Key Management Rewards" icon="key">
+    Additional relative inflation is distributed to validators that participate in multisig keygen and signing sessions.
+  </Card>
+  <Card title="Reward Pools" icon="piggy-bank">
+    Rewards accumulate in named pools per chain or session type and are distributed at epoch boundaries.
+  </Card>
+  <Card title="Fee Refunds" icon="receipt">
+    The module can refund transaction fees for specific privileged messages (like vald submissions) to reduce operational costs.
+  </Card>
+</CardGroup>
+
+## Key Concepts
+
+### Reward Pool
+
+A `Pool` holds accumulated rewards for a named activity (e.g., an external chain name or a key management session). Each pool stores per-validator reward amounts:
+
+```go
+func NewPool(name string) Pool {
+    return Pool{
+        Name:    utils.NormalizeString(name),
+        Rewards: []Pool_Reward{},
+    }
+}
+```
+
+Pools are validated to ensure no duplicate validators appear and all reward coins are non-empty.
+
+### External Chain Voting Inflation
+
+The `ExternalChainVotingInflationRate` parameter controls how much of the block inflation is directed to validators for correct external chain event voting. This rate is applied relative to the total AXL staking inflation and split among all active chain maintainers weighted by their voting participation.
+
+### Key Management Relative Inflation
+
+The `KeyMgmtRelativeInflationRate` parameter specifies an additional fractional reward for validators participating in keygen and signing sessions. This is expressed as a fraction of the external chain voting inflation, making it a secondary incentive layered on top of the primary voting rewards.
+
+### Refund Mechanism
+
+Certain operational messages (such as those submitted by vald) can be designated for fee refunds. When a `Refund` is processed, the module pays back the transaction fees to the original sender:
+
+```go
+func (m Refund) ValidateBasic() error {
+    if err := sdk.VerifyAddressFormat(m.Payer); err != nil {
+        return errorsmod.Wrap(sdkerrors.ErrInvalidAddress, errorsmod.Wrap(err, "payer").Error())
+    }
+    if err := m.Fees.Validate(); err != nil {
+        return err
+    }
+    ...
+}
+```
+
+## Reward Distribution Flow
+
+<Steps>
+  <Step title="Chain Maintainer Registered">
+    When a validator registers as a chain maintainer (via the Nexus module), they become eligible to earn external chain voting rewards for that chain.
+  </Step>
+  <Step title="Poll Participation Tracked">
+    As validators cast votes on EVM event polls, the Reward module records participation. Correct votes and on-time votes earn full rewards; late votes may earn partial rewards.
+  </Step>
+  <Step title="Keygen/Signing Participation">
+    Validators that submit public keys during keygen sessions or signatures during signing sessions accumulate key management rewards.
+  </Step>
+  <Step title="Epoch Distribution">
+    At each epoch boundary, accumulated pool rewards are distributed to eligible validators proportional to their participation, drawn from the block inflation allocation.
+  </Step>
+</Steps>
+
+<Note>
+The bug where external chain voting inflation rewards were not being distributed to chain maintainers was fixed in v1.3.5. Ensure you are running v1.3.5 or later to receive correct reward distributions.
+</Note>
+
+## Module Parameters
+
+<Accordion title="Reward Parameters">
+  <ParamField path="ExternalChainVotingInflationRate" type="math.LegacyDec" required>
+    Fraction of block inflation allocated to validators for participating in external chain event voting. Must be in `[0, 1]`. Default: `0` (disabled until set by governance).
+  </ParamField>
+
+  <ParamField path="KeyMgmtRelativeInflationRate" type="math.LegacyDec" required>
+    Additional reward rate for key management participation expressed as a fraction relative to the external chain voting inflation rate. Must be in `[0, 1]`. Default: `0`.
+  </ParamField>
+</Accordion>
+
+<Info>
+Both parameters default to zero in the genesis state. Governance must submit a parameter change proposal to enable reward distribution. This is intentional — it allows the community to calibrate incentives before activating them.
+</Info>
+
+## Querying Inflation Rates
+
+```bash
+# Query the current network-wide inflation rate
+axelard query reward inflation-rate
+
+# Query the effective inflation rate for a specific validator
+axelard query reward inflation-rate \
+  --validator axelarvaloper1...
+
+# Show reward module parameters
+axelard query reward params
+```
+
+## CLI Reference
+
+### Query Commands
+
+```bash
+# Get the overall network inflation rate
+axelard query reward inflation-rate
+
+# Get the inflation rate for a specific validator
+axelard query reward inflation-rate --validator axelarvaloper1...
+
+# Show reward module parameters
+axelard query reward params
+```
+
+### Transaction Commands
+
+```bash
+# Refund fees for a specific message (governance/operational use)
+axelard tx reward refund-msg [msg-json] \
+  --from <gov-key> \
+  --chain-id axelar-dojo-1
+
+# Update reward module parameters via governance
+axelard tx reward update-params \
+  --external-chain-voting-inflation-rate 0.05 \
+  --key-mgmt-relative-inflation-rate 0.1 \
+  --from <gov-key> \
+  --chain-id axelar-dojo-1
+```
+
+<Tip>
+Use `axelard query reward inflation-rate --validator [address]` to audit how much a specific validator is earning from cross-chain duties versus standard staking inflation. This helps diagnose participation issues when rewards are unexpectedly low.
+</Tip>

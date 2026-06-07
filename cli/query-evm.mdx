@@ -1,0 +1,818 @@
+---
+title: "EVM Query Commands — Axelar CLI Reference (axelard)"
+sidebarTitle: "EVM Queries"
+description: "Reference for all axelard query evm subcommands: chains, gateway address, batched commands, tokens, events, and EVM module parameters."
+---
+
+The `axelard query evm` command group provides read-only access to the state of Axelar's EVM module. Use these subcommands to inspect supported chains, gateway contracts, command batches, registered tokens, on-chain events, and chain-specific parameters — all without submitting any transaction.
+
+<Info>
+  All EVM query subcommands accept `--node`, `--grpc-addr`, `--height`, and `--output` flags. The `--height` flag lets you query historical state at a specific block, which may fail if the node has pruned that data.
+</Info>
+
+## Global Flags
+
+The following flags are inherited by every `axelard query evm` subcommand.
+
+<ParamField path="--home" type="string">
+  Directory for config and data. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+<ParamField path="--log_format" type="string">
+  Logging format: `json` or `plain`. Defaults to `plain`.
+</ParamField>
+
+<ParamField path="--log_level" type="string">
+  Logging level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, or `panic`. Defaults to `info`.
+</ParamField>
+
+<ParamField path="--output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+<ParamField path="--trace" type="boolean">
+  Print full stack trace on errors.
+</ParamField>
+
+---
+
+## Subcommands
+
+<Accordion title="chains — List supported EVM chains">
+
+Returns the supported EVM chains, optionally filtered by activation status.
+
+**Syntax**
+
+```bash
+axelard query evm chains [flags]
+```
+
+**Flags**
+
+<ParamField path="--status" type="string">
+  Filter chains by status. Accepted values: `activated` or `deactivated`.
+</ParamField>
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels. If not set, the server must use TLS.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height. May error if the node is pruning state.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+# List all activated EVM chains
+axelard query evm chains --status activated
+
+# List all deactivated EVM chains
+axelard query evm chains --status deactivated
+
+# List all chains regardless of status
+axelard query evm chains
+```
+
+**Example output**
+
+```
+chains:
+- Ethereum
+- Avalanche
+- Polygon
+- Fantom
+- Moonbeam
+```
+
+</Accordion>
+
+<Accordion title="gateway-address — Get Axelar Gateway contract address">
+
+Queries the Axelar Gateway contract address deployed on the specified EVM chain. This address is the entry point for cross-chain calls originating from that chain.
+
+**Syntax**
+
+```bash
+axelard query evm gateway-address [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the EVM chain whose Gateway contract address you want to retrieve (e.g., `Ethereum`, `Avalanche`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query evm gateway-address Ethereum
+axelard query evm gateway-address Avalanche --output json
+```
+
+**Example output**
+
+```
+address: 0x4F4495243837681061C4743b74B3eEdf548D56A5
+```
+
+</Accordion>
+
+<Accordion title="batched-commands — Get a signed command batch by ID">
+
+Retrieves the signed batched commands for a given chain and batch ID. The returned data can be wrapped in an EVM transaction and submitted to the Axelar Gateway contract for execution.
+
+**Syntax**
+
+```bash
+axelard query evm batched-commands [chain] [batchedCommandsID] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the EVM chain (e.g., `Ethereum`).
+</ParamField>
+
+<ParamField path="batchedCommandsID" type="string" required>
+  The hex-encoded ID of the command batch to retrieve.
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query evm batched-commands Ethereum 0000000000000000000000000000000000000000000000000000000000000001
+```
+
+**Example output**
+
+```
+id: "0000000000000000000000000000000000000000000000000000000000000001"
+status: BATCHED_COMMANDS_STATUS_SIGNED
+key_id: "Ethereum-key-2024"
+command_ids:
+- "abc123..."
+data: "0x..."
+sig_hash: "0x..."
+execute_data: "0x..."
+```
+
+<Tip>
+  Use `execute_data` from the response to build the EVM transaction that calls `execute()` on the Axelar Gateway contract.
+</Tip>
+
+</Accordion>
+
+<Accordion title="latest-batched-commands — Get the most recent command batch">
+
+Retrieves the most recently created batched commands for the specified EVM chain. This is a shortcut that avoids needing to know the batch ID.
+
+**Syntax**
+
+```bash
+axelard query evm latest-batched-commands [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the EVM chain (e.g., `Ethereum`, `Polygon`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query evm latest-batched-commands Ethereum
+axelard query evm latest-batched-commands Polygon --output json
+```
+
+</Accordion>
+
+<Accordion title="pending-commands — List unsigned pending commands">
+
+Returns the list of commands that have not yet been included in a command batch for the specified chain. These are queued and waiting to be batched and signed.
+
+**Syntax**
+
+```bash
+axelard query evm pending-commands [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the EVM chain to query (e.g., `Ethereum`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query evm pending-commands Ethereum
+```
+
+**Example output**
+
+```
+commands:
+- id: "abc123..."
+  type: "approveContractCall"
+  params: "..."
+  key_id: "Ethereum-key-2024"
+  max_gas_cost: 100000
+```
+
+</Accordion>
+
+<Accordion title="command — Get info for a specific command">
+
+Returns detailed information about a specific EVM gateway command given its chain and command ID.
+
+**Syntax**
+
+```bash
+axelard query evm command [chain] [id] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the EVM chain (e.g., `Ethereum`).
+</ParamField>
+
+<ParamField path="id" type="string" required>
+  The hex-encoded command ID to look up.
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query evm command Ethereum abc123def456
+```
+
+**Example output**
+
+```
+id: "abc123def456"
+type: "mintToken"
+params: "..."
+key_id: "Ethereum-key-2024"
+max_gas_cost: 50000
+```
+
+</Accordion>
+
+<Accordion title="event — Get status of an on-chain event">
+
+Returns the status and details of a specific on-chain event that Axelar has observed for the given EVM chain. Events include token transfers, contract calls, and other Gateway interactions.
+
+**Syntax**
+
+```bash
+axelard query evm event [chain] [event-id] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the EVM chain where the event occurred (e.g., `Ethereum`).
+</ParamField>
+
+<ParamField path="event-id" type="string" required>
+  The ID of the event to retrieve. Typically formatted as `txHash-logIndex`.
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query evm event Ethereum 0xabc123...def-1
+```
+
+**Example output**
+
+```
+event:
+  chain: Ethereum
+  tx_id: "0xabc123..."
+  index: 1
+  status: EVENT_STATUS_COMPLETED
+```
+
+</Accordion>
+
+<Accordion title="erc20-tokens — List registered ERC20 tokens">
+
+Returns the list of ERC20 tokens registered on the given EVM chain. Results can be filtered by token type (external or internal).
+
+**Syntax**
+
+```bash
+axelard query evm erc20-tokens [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the EVM chain to query (e.g., `Ethereum`, `Avalanche`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--token-type" type="string">
+  Filter tokens by type. Accepted values: `external` or `internal`.
+</ParamField>
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+# List all registered ERC20 tokens on Ethereum
+axelard query evm erc20-tokens Ethereum
+
+# List only external tokens
+axelard query evm erc20-tokens Ethereum --token-type external
+```
+
+**Example output**
+
+```
+tokens:
+- asset: "uaxl"
+  symbol: "AXL"
+  address: "0x..."
+  is_external: false
+  burner_code_hash: "0x..."
+- asset: "wbtc-satoshi"
+  symbol: "WBTC"
+  address: "0x..."
+  is_external: true
+  burner_code_hash: "0x..."
+```
+
+</Accordion>
+
+<Accordion title="token-info — Get token info by symbol, asset, or address">
+
+Returns detailed information about a specific token on an EVM chain. You can look up by symbol, asset name, or contract address. Exactly one lookup flag must be provided.
+
+**Syntax**
+
+```bash
+axelard query evm token-info [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the EVM chain to query (e.g., `Ethereum`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--symbol" type="string">
+  Look up the token by its ticker symbol (e.g., `AXL`, `WBTC`).
+</ParamField>
+
+<ParamField path="--asset" type="string">
+  Look up the token by its asset name (e.g., `uaxl`, `wbtc-satoshi`).
+</ParamField>
+
+<ParamField path="--address" type="string">
+  Look up the token by its EVM contract address.
+</ParamField>
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+# Lookup by symbol
+axelard query evm token-info Ethereum --symbol AXL
+
+# Lookup by asset name
+axelard query evm token-info Ethereum --asset uaxl
+
+# Lookup by contract address
+axelard query evm token-info Ethereum --address 0x467719ad09025fcc6cf6f8311755809d45a5e5f3
+```
+
+**Example output**
+
+```
+asset: "uaxl"
+symbol: "AXL"
+address: "0x467719ad09025fcc6cf6f8311755809d45a5e5f3"
+is_external: false
+burner_code_hash: "0x..."
+```
+
+</Accordion>
+
+<Accordion title="confirmation-height — Get minimum confirmation height">
+
+Returns the minimum number of block confirmations required before Axelar will process events from the given EVM chain. A higher confirmation height increases security by reducing the risk of chain reorganizations.
+
+**Syntax**
+
+```bash
+axelard query evm confirmation-height [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the EVM chain to query (e.g., `Ethereum`, `Polygon`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query evm confirmation-height Ethereum
+axelard query evm confirmation-height Polygon --output json
+```
+
+**Example output**
+
+```
+height: 35
+```
+
+</Accordion>
+
+<Accordion title="address — Get EVM address for a key">
+
+Returns the EVM address corresponding to the key used by the Axelar network for the specified chain, optionally for a specific key ID.
+
+**Syntax**
+
+```bash
+axelard query evm address [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the EVM chain (e.g., `Ethereum`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--key-id" type="string">
+  The ID of the key to retrieve the address for.
+</ParamField>
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query evm address Ethereum
+axelard query evm address Ethereum --key-id Ethereum-key-2024
+```
+
+**Example output**
+
+```
+address: "0x1234567890abcdef1234567890abcdef12345678"
+key_id: "Ethereum-key-2024"
+```
+
+</Accordion>
+
+<Accordion title="bytecode — Fetch token contract bytecode">
+
+Fetches the token bytecode registered for the given EVM chain. This bytecode is used when deploying new token contracts through the Axelar Gateway.
+
+**Syntax**
+
+```bash
+axelard query evm bytecode [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the EVM chain to query (e.g., `Ethereum`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query evm bytecode Ethereum
+axelard query evm bytecode Avalanche --output json
+```
+
+**Example output**
+
+```
+bytecode: "0x608060405234801561001057600080fd5b50..."
+```
+
+</Accordion>
+
+<Accordion title="params — Get EVM module parameters">
+
+Returns the on-chain parameters for a specific EVM chain registered in Axelar's EVM module. Parameters include network details, confirmation requirements, and voting thresholds.
+
+**Syntax**
+
+```bash
+axelard query evm params [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the EVM chain whose parameters you want to retrieve (e.g., `Ethereum`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query evm params Ethereum
+axelard query evm params Polygon --output json
+```
+
+**Example output**
+
+```
+params:
+  chain: Ethereum
+  confirmation_height: 35
+  network: "mainnet"
+  token_code: "0x..."
+  burnable: "0x..."
+  revote_locking_period: 50
+  voting_threshold: "51/100"
+  min_voter_count: 1
+  commands_gas_limit: 5000000
+  end_blocker_limit: 50
+  transfer_limit: 50
+```
+
+</Accordion>

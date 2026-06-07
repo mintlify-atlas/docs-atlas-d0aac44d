@@ -1,0 +1,276 @@
+---
+title: "EVM Module: Axelar EVM Chain Integration Layer"
+sidebarTitle: "EVM"
+description: "The EVM module integrates Ethereum-compatible chains into Axelar, managing Gateway contracts, command batches, event confirmation, token deployment, and cross-chain signing."
+---
+
+The EVM module connects Axelar to every supported Ethereum-compatible chain. It manages the on-chain Axelar Gateway contract for each EVM network, assembles and signs batches of commands (token deployments, mints, burns, and operatorship transfers), and orchestrates the end-to-end confirmation flow for EVM events. Validators observe external chain events and vote on them through this module before commands are signed and sent back to the gateway.
+
+<CardGroup cols={2}>
+  <Card title="Gateway Management" icon="server">
+    Registers and tracks the AxelarGateway contract address per EVM chain and builds ABI-encoded command batches for execution.
+  </Card>
+  <Card title="Command Batching" icon="layer-group">
+    Aggregates pending gateway commands — deployToken, mintToken, burnToken, transferOperatorship — into signed `CommandBatch` objects.
+  </Card>
+  <Card title="Event Confirmation" icon="circle-check">
+    Validators submit confirmation transactions for EVM gateway events; votes are tallied before commands are queued.
+  </Card>
+  <Card title="ERC20 Token Lifecycle" icon="coins">
+    Supports creating, confirming, and managing ERC20 tokens on EVM chains with versioned burner code hashes.
+  </Card>
+</CardGroup>
+
+## Key Concepts
+
+### AxelarGateway Contract
+
+The `AxelarGateway` is the on-chain contract deployed to each EVM chain. It receives signed command batches and executes them. Axelar validators produce a signed `CommandBatch` that is submitted to the gateway's `execute(bytes input)` function.
+
+```go
+// AxelarGateway execute ABI (from types.go)
+const axelarGatewayABI = `[{
+    "inputs": [{"internalType": "bytes", "name": "input", "type": "bytes"}],
+    "name": "execute",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+}]`
+```
+
+### CommandBatch
+
+A `CommandBatch` is the unit of work signed by the multisig module and submitted to the gateway. It may contain multiple commands in a single ABI-encoded payload, reducing the number of on-chain transactions needed.
+
+### Command Types
+
+| Command | Description |
+|---|---|
+| `deployToken` | Deploys a new ERC20 token contract on the destination chain |
+| `mintToken` | Mints tokens to a recipient address on the destination chain |
+| `burnToken` | Burns tokens from a deposit address (bridging back to source) |
+| `transferOperatorship` | Rotates the operator key on the gateway contract |
+
+### BurnerInfo & ERC20Deposit
+
+Burner contracts hold deposited funds until they are confirmed and bridged. Axelar tracks multiple burner versions by their code hash:
+
+```go
+const (
+    BurnerCodeHashV1 = "0x70be6eedec1d63b7cf8b9233615e4e408c99e0753be123b605aa5d53ed4a8670"
+    BurnerCodeHashV2 = "0x49c166661e31e0bf5434d891dea1448dc35f6ecd54a0d88594df06e24effe7c2"
+    BurnerCodeHashV3 = "0xa50851cafd39f2f61171c0c00a11bda820ed0958950df5a53ba11a047402351f"
+    BurnerCodeHashV4 = "0x701d8db26f2d668fee8acf2346199a6b63b0173f212324d1c5a04b4d4de95666"
+    BurnerCodeHashV5 = "0x9f217a79e864028081339cfcead3c3d1fe92e237fcbe9468d6bb4d1da7aa6352"
+)
+```
+
+The current active version is validated on chain registration and gateway migration.
+
+## EVM Chain Lifecycle
+
+<Steps>
+  <Step title="Add Chain">
+    Register a new EVM chain with its chain ID, confirmation height, and network name via `axelard tx evm add-chain`.
+  </Step>
+  <Step title="Set Gateway">
+    Once the AxelarGateway contract is deployed on the target network, record its address: `axelard tx evm set-gateway [chain] [address]`.
+  </Step>
+  <Step title="Confirm Transactions">
+    Validators submit `confirm-gateway-txs` to trigger voting on observed EVM events. Polls are created per event.
+  </Step>
+  <Step title="Sign Commands">
+    After events are confirmed, `sign-commands` bundles pending commands into a `CommandBatch` and starts a multisig signing session.
+  </Step>
+  <Step title="Execute on Gateway">
+    The signed batch is broadcast to the EVM chain and submitted to `AxelarGateway.execute()`.
+  </Step>
+</Steps>
+
+## Event Confirmation Flow
+
+```bash
+# 1. Confirm gateway transactions observed on a chain
+axelard tx evm confirm-gateway-txs ethereum \
+  --from <proxy-key> \
+  --chain-id axelar-dojo-1
+
+# 2. Sign the pending commands into a batch
+axelard tx evm sign-commands ethereum \
+  --from <proxy-key> \
+  --chain-id axelar-dojo-1
+```
+
+Once `sign-commands` is submitted, a multisig signing session is created (see the Multisig module). Validators submit their individual signatures, and the threshold-aggregated batch can then be queried and sent to the gateway.
+
+<Note>
+If an EVM event fails to reach quorum, it can be retried with `axelard tx evm retry-event [chain] [event-id]`. Use this only after investigating why the event did not confirm.
+</Note>
+
+## Token Deployment
+
+Deploy a new ERC20 token on an EVM chain that maps to a registered asset:
+
+```bash
+# Create a deploy-token command targeting Ethereum for the USDC asset
+axelard tx evm create-deploy-token ethereum \
+  --asset ibc/9F4CBD1BDED0... \
+  --symbol USDC \
+  --name "USD Coin" \
+  --decimals 6 \
+  --capacity 0 \
+  --from <gov-key> \
+  --chain-id axelar-dojo-1
+
+# Confirm the ERC20 token deployment after it appears on chain
+axelard tx evm confirm-erc20-token ethereum \
+  --origin-chain cosmoshub \
+  --origin-asset uusdc \
+  --tx-id 0xabc... \
+  --from <proxy-key>
+```
+
+## Module Parameters
+
+<Accordion title="EVM Parameters (per-chain)">
+  <ParamField path="Chain" type="ChainName" required>
+    The Axelar chain name this parameter set applies to (e.g., `ethereum`).
+  </ParamField>
+
+  <ParamField path="ConfirmationHeight" type="uint64" required>
+    Minimum block confirmations required before an EVM event is eligible for voting. Default: `1`.
+  </ParamField>
+
+  <ParamField path="Network" type="string" required>
+    The EVM network label (e.g., `mainnet`, `ganache`). Used to select the correct chain ID from the `Networks` list.
+  </ParamField>
+
+  <ParamField path="VotingThreshold" type="Threshold" required>
+    Fraction of voting power required for an EVM poll to reach quorum. Default: `51/100`.
+  </ParamField>
+
+  <ParamField path="VotingGracePeriod" type="int64" required>
+    Number of blocks after a poll expires during which late votes are still accepted. Default: `2` blocks (adjusted to `15` for 1s block time networks).
+  </ParamField>
+
+  <ParamField path="RevoteLockingPeriod" type="int64" required>
+    Number of blocks during which validators cannot change a submitted vote. Default: `75` blocks.
+  </ParamField>
+
+  <ParamField path="MinVoterCount" type="int64" required>
+    Minimum number of voters required for a poll to be valid. Default: `1`.
+  </ParamField>
+
+  <ParamField path="CommandsGasLimit" type="uint32" required>
+    Gas limit applied when estimating execution of a command batch on the EVM chain. Default: `5000000`.
+  </ParamField>
+
+  <ParamField path="EndBlockerLimit" type="uint64" required>
+    Maximum commands processed per block in the end blocker. Default: `50`.
+  </ParamField>
+
+  <ParamField path="TransferLimit" type="uint64" required>
+    Maximum pending transfers processed per block. Default: `50`.
+  </ParamField>
+</Accordion>
+
+<Warning>
+The `RevoteLockingPeriod` and `VotingGracePeriod` were updated from 15/3 to 75/15 blocks with the introduction of 1-second block times in v1.3.0. Ensure your vald configuration reflects these new values.
+</Warning>
+
+## CLI Reference
+
+### Query Commands
+
+```bash
+# Get the AxelarGateway address for a chain
+axelard query evm gateway-address ethereum
+
+# Query a specific batched-commands object by ID
+axelard query evm batched-commands ethereum [batch-id]
+
+# Get the latest batched commands
+axelard query evm latest-batched-commands ethereum
+
+# List commands not yet added to a batch
+axelard query evm pending-commands ethereum
+
+# Get info about a specific command
+axelard query evm command ethereum [command-id]
+
+# Get an event by chain and event ID
+axelard query evm event ethereum [event-id]
+
+# List ERC20 tokens registered on a chain
+axelard query evm erc20-tokens ethereum
+
+# Query token info by symbol, asset, or address
+axelard query evm token-info ethereum --symbol USDC
+
+# Get minimum confirmation height
+axelard query evm confirmation-height ethereum
+
+# List supported EVM chains by status
+axelard query evm chains --status active
+
+# Fetch burner bytecode for a chain
+axelard query evm bytecode ethereum burner
+
+# Query an EVM address associated with a linker
+axelard query evm address ethereum [address]
+
+# Show EVM module params for a chain
+axelard query evm params ethereum
+```
+
+### Transaction Commands
+
+```bash
+# Add a new EVM chain (governance)
+axelard tx evm add-chain \
+  --name polygon \
+  --key-type ecdsa \
+  --params '{"chain":"polygon","confirmation_height":10,"network":"mainnet"}' \
+  --from <gov-key>
+
+# Set the gateway address after deployment
+axelard tx evm set-gateway ethereum 0xABCD... \
+  --from <gov-key>
+
+# Confirm gateway transactions (run by vald)
+axelard tx evm confirm-gateway-txs ethereum \
+  --from <proxy-key>
+
+# Sign pending commands into a batch
+axelard tx evm sign-commands ethereum \
+  --from <proxy-key>
+
+# Create a deploy-token command
+axelard tx evm create-deploy-token ethereum \
+  --asset uusdc --symbol USDC --name "USD Coin" \
+  --decimals 6 --capacity 0 \
+  --from <gov-key>
+
+# Confirm an ERC20 token deployment
+axelard tx evm confirm-erc20-token ethereum \
+  --origin-chain cosmoshub --origin-asset uatom \
+  --tx-id 0xabc... \
+  --from <proxy-key>
+
+# Create a transfer-operatorship command
+axelard tx evm transfer-operatorship ethereum \
+  --from <gov-key>
+
+# Confirm a transfer-operatorship transaction
+axelard tx evm confirm-transfer-operatorship ethereum \
+  --tx-id 0xabc... \
+  --from <proxy-key>
+
+# Retry a failed EVM event
+axelard tx evm retry-event ethereum [event-id] \
+  --from <proxy-key>
+```
+
+<Tip>
+Use `axelard query evm pending-commands ethereum` to inspect what commands will be included in the next `sign-commands` batch before it is initiated.
+</Tip>

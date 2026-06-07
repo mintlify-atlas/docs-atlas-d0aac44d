@@ -1,0 +1,344 @@
+---
+title: "Multisig Query Commands — Axelar CLI Reference Guide"
+sidebarTitle: "Multisig Queries"
+description: "Reference for all axelard query multisig subcommands: key details, key IDs, keygen sessions, next rotation keys, and multisig module parameters."
+---
+
+The `axelard query multisig` command group provides read-only access to Axelar's Multisig module state. The Multisig module manages the threshold key pairs used by Axelar validators to collectively sign EVM command batches and other cross-chain operations. Use these subcommands to inspect key assignments, active keygen sessions, and pending key rotations.
+
+<Info>
+  All Multisig query subcommands accept `--node`, `--grpc-addr`, `--height`, and `--output` flags. Historical queries using `--height` may fail if the node has pruned that block's state.
+</Info>
+
+## Global Flags
+
+The following flags are inherited by every `axelard query multisig` subcommand.
+
+<ParamField path="--home" type="string">
+  Directory for config and data. Defaults to `$HOME/.axelar`.
+</ParamField>
+
+<ParamField path="--log_format" type="string">
+  Logging format: `json` or `plain`. Defaults to `plain`.
+</ParamField>
+
+<ParamField path="--log_level" type="string">
+  Logging level: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, or `panic`. Defaults to `info`.
+</ParamField>
+
+<ParamField path="--output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+<ParamField path="--trace" type="boolean">
+  Print full stack trace on errors.
+</ParamField>
+
+---
+
+## Subcommands
+
+<Accordion title="key — Get key details by ID">
+
+Returns the details of the multisig key corresponding to the given key ID. Key details include the participating validators, their public key shares, and the signing threshold required to produce a valid signature.
+
+**Syntax**
+
+```bash
+axelard query multisig key [key-id] [flags]
+```
+
+**Arguments**
+
+<ParamField path="key-id" type="string" required>
+  The unique identifier of the multisig key to look up (e.g., `Ethereum-key-2024`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels. If not set, the server must use TLS.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height. May error if the node is pruning state.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query multisig key Ethereum-key-2024
+axelard query multisig key Avalanche-key-2023 --output json
+```
+
+**Example output**
+
+```
+key:
+  id: "Ethereum-key-2024"
+  multisig_key:
+    threshold: 2
+    pubkeys:
+    - key_id: "Ethereum-key-2024"
+      participant: "axelarvaloper1abc..."
+      pub_key: "0x04abc..."
+    - key_id: "Ethereum-key-2024"
+      participant: "axelarvaloper1def..."
+      pub_key: "0x04def..."
+  state: KEY_STATE_ACTIVE
+```
+
+<Note>
+  Keys with state `KEY_STATE_ACTIVE` are currently in use for signing. Keys with `KEY_STATE_INACTIVE` have been rotated out and are no longer used for new batches.
+</Note>
+
+</Accordion>
+
+<Accordion title="key-id — Get current key ID for a chain">
+
+Returns the key ID currently assigned to the given chain. This is the active multisig key used to sign command batches for that chain.
+
+**Syntax**
+
+```bash
+axelard query multisig key-id [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the chain to look up the active key ID for (e.g., `Ethereum`, `Avalanche`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query multisig key-id Ethereum
+axelard query multisig key-id Avalanche --output json
+```
+
+**Example output**
+
+```
+key_id: "Ethereum-key-2024"
+```
+
+<Tip>
+  Use the returned `key_id` with `axelard query multisig key` to fetch the full key details, or with `axelard query evm address` to find the corresponding EVM address.
+</Tip>
+
+</Accordion>
+
+<Accordion title="next-key-id — Get next rotation key ID for a chain">
+
+Returns the key ID assigned for the next key rotation on the specified chain. This key is being prepared (via a keygen session) and will replace the current active key once the rotation is confirmed.
+
+**Syntax**
+
+```bash
+axelard query multisig next-key-id [chain] [flags]
+```
+
+**Arguments**
+
+<ParamField path="chain" type="string" required>
+  The name of the chain to query the next key ID for (e.g., `Ethereum`, `Polygon`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query multisig next-key-id Ethereum
+axelard query multisig next-key-id Avalanche --output json
+```
+
+**Example output**
+
+```
+key_id: "Ethereum-key-2025"
+```
+
+<Note>
+  If no key rotation is in progress, this query will return an error or an empty response indicating that no next key is scheduled.
+</Note>
+
+</Accordion>
+
+<Accordion title="keygen-session — Get keygen session info">
+
+Returns detailed information about the keygen session associated with the given key ID. A keygen session is the distributed key generation protocol that validators participate in to create a new multisig key.
+
+**Syntax**
+
+```bash
+axelard query multisig keygen-session [key-id] [flags]
+```
+
+**Arguments**
+
+<ParamField path="key-id" type="string" required>
+  The key ID whose keygen session you want to inspect (e.g., `Ethereum-key-2025`).
+</ParamField>
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query multisig keygen-session Ethereum-key-2025
+axelard query multisig keygen-session Avalanche-key-2024 --output json
+```
+
+**Example output**
+
+```
+session:
+  key_id: "Ethereum-key-2025"
+  state: KEYGEN_STATE_COMPLETED
+  key_share_distribution_policy: KEY_SHARE_DISTRIBUTION_POLICY_WEIGHTED_BY_STAKE
+  expires_at: 7850000
+  completed_at: 7849500
+  is_grace_period: false
+  count: 3
+  threshold: 2
+  participants:
+  - address: "axelarvaloper1abc..."
+    pub_key: "0x04abc..."
+  - address: "axelarvaloper1def..."
+    pub_key: "0x04def..."
+  - address: "axelarvaloper1ghi..."
+    pub_key: "0x04ghi..."
+```
+
+<Note>
+  A keygen session in `KEYGEN_STATE_PENDING` is awaiting participant submissions. `KEYGEN_STATE_COMPLETED` means the key is ready. `KEYGEN_STATE_FAILED` means the session did not complete in time and must be restarted.
+</Note>
+
+</Accordion>
+
+<Accordion title="params — Get Multisig module parameters">
+
+Returns the on-chain governance parameters for the Multisig module. These parameters govern keygen session timeouts, signing timeouts, and other protocol-level settings.
+
+**Syntax**
+
+```bash
+axelard query multisig params [flags]
+```
+
+**Flags**
+
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels.
+</ParamField>
+
+<ParamField path="--height" type="integer">
+  Query state at a specific block height.
+</ParamField>
+
+<ParamField path="--node" type="string">
+  `<host>:<port>` to CometBFT RPC interface. Defaults to `tcp://localhost:26657`.
+</ParamField>
+
+<ParamField path="-o / --output" type="string">
+  Output format: `text` or `json`. Defaults to `text`.
+</ParamField>
+
+**Example**
+
+```bash
+axelard query multisig params
+axelard query multisig params --output json
+```
+
+**Example output**
+
+```
+params:
+  keygen_threshold: "51/100"
+  signing_threshold: "51/100"
+  keygen_timeout: 100
+  sign_timeout: 100
+```
+
+</Accordion>

@@ -1,0 +1,259 @@
+---
+title: "Nexus Module: Cross-Chain Message Routing Hub"
+sidebarTitle: "Nexus"
+description: "The Nexus module is Axelar's central routing layer, managing registered chains, cross-chain transfers, general messages, asset fees, and chain maintainer participation."
+---
+
+The Nexus module is the backbone of Axelar's interoperability protocol. It maintains a registry of all supported chains, routes cross-chain messages and asset transfers between them, tracks transfer states, and manages the set of validator maintainers responsible for each external chain. Every asset transfer and general message that moves through Axelar passes through this module.
+
+<CardGroup cols={2}>
+  <Card title="Chain Registry" icon="link">
+    Maintains the canonical list of active and inactive chains, including EVM, IBC Cosmos, and CosmWasm chains.
+  </Card>
+  <Card title="Message Routing" icon="route">
+    Routes `GeneralMessage` objects from source chains to destination chains via registered `MessageRoute` handlers.
+  </Card>
+  <Card title="Asset Management" icon="coins">
+    Registers assets on chains, tracks cross-chain transfer states, and manages fee configuration per chain/asset pair.
+  </Card>
+  <Card title="Chain Maintainers" icon="shield">
+    Tracks which bonded validators maintain each external chain, enforcing participation thresholds to ensure liveness.
+  </Card>
+</CardGroup>
+
+## Key Concepts
+
+### Chain
+
+A `Chain` represents any blockchain network registered with Axelar. Each chain has a unique name, an associated module (e.g., `evm`, `axelarnet`), and a key type.
+
+```go
+// Validate performs a stateless check to ensure the Chain object has been initialized correctly
+func (m Chain) Validate() error {
+    if err := m.Name.Validate(); err != nil {
+        return errorsmod.Wrap(err, "invalid chain name")
+    }
+    if err := m.KeyType.Validate(); err != nil {
+        return err
+    }
+    if m.Module == "" {
+        return fmt.Errorf("missing module name")
+    }
+    return nil
+}
+```
+
+### CrossChainAddress
+
+A `CrossChainAddress` pairs a chain with a native address string on that chain:
+
+```go
+func (m CrossChainAddress) Validate() error {
+    if err := m.Chain.Validate(); err != nil {
+        return err
+    }
+    if err := utils.ValidateString(m.Address); err != nil {
+        return errorsmod.Wrap(err, "invalid address")
+    }
+    return nil
+}
+```
+
+### CrossChainTransfer
+
+A `CrossChainTransfer` records a pending or completed asset transfer including a unique `TransferID`, a `CrossChainAddress` recipient, a `sdk.Coin` asset, and a `TransferState`.
+
+```go
+func NewPendingCrossChainTransfer(id uint64, recipient CrossChainAddress, asset sdk.Coin) CrossChainTransfer {
+    return NewCrossChainTransfer(id, recipient, asset, Pending)
+}
+```
+
+### TransferState
+
+Transfers move through the following states:
+
+| State | Description |
+|---|---|
+| `TRANSFER_STATE_PENDING` | Queued but not yet executed |
+| `TRANSFER_STATE_ARCHIVED` | Successfully completed |
+| `TRANSFER_STATE_INSUFFICIENT_FEE` | Rejected due to fee shortfall |
+
+### GeneralMessage
+
+A `GeneralMessage` is an arbitrary cross-chain payload — for example, a GMP call from an EVM chain. The Nexus module routes it to the correct destination module via a registered `MessageRoute`.
+
+```go
+type MessageRoute func(ctx sdk.Context, routingCtx RoutingContext, msg GeneralMessage) error
+```
+
+### FeeInfo
+
+Fees are registered per chain-asset pair with a rate, minimum, and maximum:
+
+```go
+func NewFeeInfo(chain ChainName, asset string, feeRate math.LegacyDec, minFee math.Int, maxFee math.Int) FeeInfo {
+    return FeeInfo{Chain: chain, Asset: asset, FeeRate: feeRate, MinFee: minFee, MaxFee: maxFee}
+}
+```
+
+## Message Routing Flow
+
+When a cross-chain message is created on a source chain, Nexus processes it as follows:
+
+1. The source chain module (EVM or axelarnet) submits the `GeneralMessage` to Nexus.
+2. Nexus looks up the destination chain and retrieves the registered `MessageRoute`.
+3. If the route exists, the message is dispatched to the destination module's handler.
+4. On success the message is marked `APPROVED`; on failure it transitions to `FAILED` and can be retried.
+
+<Note>
+Failed general messages can be retried using `axelard tx nexus retry-failed-message [id]`. This re-invokes the routing logic without requiring a new source-chain event.
+</Note>
+
+## Chain Registration & Maintainers
+
+Chains are registered at genesis or via governance. Once registered, bonded validators can opt in as **chain maintainers** — they are responsible for monitoring and voting on that chain's events.
+
+```bash
+# Register your proxy as a chain maintainer for Ethereum and Avalanche
+axelard tx nexus register-chain-maintainer ethereum avalanche \
+  --from <proxy-key> \
+  --chain-id axelar-dojo-1
+
+# Remove yourself as a maintainer
+axelard tx nexus deregister-chain-maintainer ethereum \
+  --from <proxy-key> \
+  --chain-id axelar-dojo-1
+```
+
+<Warning>
+A validator must have registered a proxy account (via the snapshot module) before calling `register-chain-maintainer`. Calls from an unregistered proxy return an error.
+</Warning>
+
+### Activate / Deactivate Chains
+
+Governance or authorized accounts can activate and deactivate chains:
+
+```bash
+axelard tx nexus activate-chain ethereum \
+  --from <gov-key> \
+  --chain-id axelar-dojo-1
+
+axelard tx nexus deactivate-chain ethereum \
+  --from <gov-key> \
+  --chain-id axelar-dojo-1
+```
+
+## Asset Fee Registration
+
+Register or update the fee schedule for an asset on a specific chain:
+
+```bash
+axelard tx nexus register-asset-fee \
+  --chain ethereum \
+  --asset uusdc \
+  --fee-rate 0.001 \
+  --min-fee 1000 \
+  --max-fee 1000000 \
+  --from <gov-key> \
+  --chain-id axelar-dojo-1
+```
+
+## Module Parameters
+
+<Accordion title="Nexus Parameters">
+  <ParamField path="ChainActivationThreshold" type="Threshold" required>
+    Fraction of voting power required to activate a chain. Default: `55/100`.
+  </ParamField>
+
+  <ParamField path="ChainMaintainerMissingVoteThreshold" type="Threshold" required>
+    Fraction of missed votes within the check window before a maintainer is penalized. Default: `20/100`.
+  </ParamField>
+
+  <ParamField path="ChainMaintainerIncorrectVoteThreshold" type="Threshold" required>
+    Fraction of incorrect votes within the check window before a maintainer is penalized. Default: `15/100`.
+  </ParamField>
+
+  <ParamField path="ChainMaintainerCheckWindow" type="int32" required>
+    Number of recent blocks used to evaluate maintainer vote quality. Default: `500`.
+  </ParamField>
+
+  <ParamField path="Gateway" type="sdk.AccAddress">
+    Bech32 address of the Axelar Gateway account used for on-chain fee collection. Empty by default.
+  </ParamField>
+
+  <ParamField path="EndBlockerLimit" type="uint64" required>
+    Maximum number of pending transfers processed per block in the end blocker. Default: `50`.
+  </ParamField>
+</Accordion>
+
+## CLI Reference
+
+### Query Commands
+
+```bash
+# List all registered chains
+axelard query nexus chains
+
+# Get chain state (active/inactive, assets)
+axelard query nexus chain-state ethereum
+
+# Query a general message by ID
+axelard query nexus message [id]
+
+# List assets registered on a chain
+axelard query nexus assets ethereum
+
+# Query fee info for a chain/asset pair
+axelard query nexus fee-info ethereum uusdc
+
+# Estimate the fee for a cross-chain transfer
+axelard query nexus transfer-fee \
+  --source-chain ethereum \
+  --dest-chain osmosis \
+  --asset uusdc \
+  --amount 1000000
+
+# List chain maintainers for a chain
+axelard query nexus chain-maintainers ethereum
+
+# Query pending/completed transfers for a chain
+axelard query nexus transfers-for-chain ethereum --state pending
+
+# Show nexus module parameters
+axelard query nexus params
+```
+
+### Transaction Commands
+
+```bash
+# Register as chain maintainer
+axelard tx nexus register-chain-maintainer ethereum avalanche \
+  --from <proxy-key>
+
+# Deregister as chain maintainer
+axelard tx nexus deregister-chain-maintainer ethereum \
+  --from <proxy-key>
+
+# Activate a chain
+axelard tx nexus activate-chain ethereum \
+  --from <gov-key>
+
+# Deactivate a chain
+axelard tx nexus deactivate-chain ethereum \
+  --from <gov-key>
+
+# Register asset fee
+axelard tx nexus register-asset-fee \
+  --chain ethereum --asset uusdc \
+  --fee-rate 0.001 --min-fee 1000 --max-fee 1000000 \
+  --from <gov-key>
+
+# Retry a failed general message
+axelard tx nexus retry-failed-message [id] \
+  --from <any-key>
+```
+
+<Tip>
+Use `axelard query nexus chain-by-asset [denom]` to discover all chains on which a given asset denom is registered. This is helpful when constructing cross-chain transfer paths.
+</Tip>

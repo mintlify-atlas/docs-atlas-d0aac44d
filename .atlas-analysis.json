@@ -1,24 +1,11 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "name": "Axelar Core",
+  "projectType": "infrastructure",
+  "projectName": "Axelar Core",
+  "projectDescription": "The core Cosmos SDK application for the Axelar Network — a decentralized blockchain interoperability network that enables cross-chain asset transfers and general message passing between EVM, IBC, and CosmWasm chains.",
   "theme": "aspen",
-  "colors": {
-    "primary": "#3ba1f5",
-    "light": "#efa47a",
-    "dark": "#343833"
-  },
-  "favicon": "https://media.brand.dev/b8d65767-1ac2-40d2-a385-9f562d4ea10d.jpg",
-  "navbar": {
-    "primary": {
-      "type": "github",
-      "href": "https://github.com/axelarnetwork/axelar-core"
-    }
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/axelarnetwork/axelar-core"
-    }
-  },
+  "primaryColor": "#3ba1f5",
+  "lightColor": "#efa47a",
+  "darkColor": "#343833",
   "navigation": {
     "tabs": [
       {
@@ -103,5 +90,36 @@
         ]
       }
     ]
-  }
+  },
+  "keyFeatures": [
+    "Cross-chain asset transfers between EVM, IBC, and CosmWasm chains",
+    "General message passing (GMP) across heterogeneous blockchains",
+    "Decentralized validator set with multisig threshold signing (tofnd integration)",
+    "EVM gateway contract management with batched command execution",
+    "IBC integration for Cosmos-based chain connectivity",
+    "CosmWasm smart contract support",
+    "On-chain governance for chain/asset registration and parameter changes",
+    "Vald sidecar daemon for external chain event monitoring and signing",
+    "Snapshot-based validator participation tracking",
+    "Quadratic voting with configurable thresholds"
+  ],
+  "publicApiSurface": [
+    "axelard start",
+    "axelard vald-start",
+    "axelard tx evm sign-commands [chain]",
+    "axelard tx evm confirm-gateway-txs [chain] [txID]",
+    "axelard tx evm create-deploy-token",
+    "axelard tx axelarnet route-message [message-id] [payload]",
+    "axelard tx axelarnet add-cosmos-based-chain",
+    "axelard tx nexus register-chain-maintainer [chain]",
+    "axelard tx multisig keygen start",
+    "axelard tx multisig rotate [chain] [keyID]",
+    "axelard tx snapshot register-proxy [proxy-address]",
+    "axelard query evm gateway-address [chain]",
+    "axelard query evm batched-commands [chain] [id]",
+    "axelard query nexus chains",
+    "axelard query nexus message [id]",
+    "axelard query multisig key [key-id]",
+    "axelard query axelarnet ibc-path [chain]"
+  ]
 }
