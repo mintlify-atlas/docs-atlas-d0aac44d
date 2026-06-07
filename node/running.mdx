@@ -1,7 +1,7 @@
 ---
 title: "Running an Axelar Node: Start, Sync & Operate"
 sidebarTitle: "Running"
-description: "Start axelard, sync from genesis or state sync, monitor health and metrics endpoints, manage snapshots, and perform common operational tasks like rollback and pruning."
+description: "Start axelard, sync via genesis or state sync, monitor health and metrics, manage snapshots, and handle operational tasks like rollback and pruning."
 ---
 
 Once your node is built and configured, running it is a matter of invoking `axelard start`. The daemon embeds CometBFT in-process and begins syncing the chain state from either genesis or a state sync snapshot. This page covers the start command and its most important flags, available monitoring endpoints, snapshot management, and the operational commands you'll reach for most often.
@@ -294,7 +294,7 @@ axelard comet unsafe-reset-all --home ~/.axelar
 
 Create `/etc/systemd/system/axelard.service`:
 
-```toml
+```ini
 [Unit]
 Description=Axelar Core Node
 After=network-online.target

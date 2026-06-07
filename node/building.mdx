@@ -1,7 +1,7 @@
 ---
 title: "Building Axelar Core: Static, Dynamic & Docker"
 sidebarTitle: "Building"
-description: "Compile the axelard binary from source using static linking, dynamic linking, or Docker images. Includes smart contract bytecode setup and GPG signature verification."
+description: "Compile axelard from source via static linking, dynamic linking, or Docker. Covers smart contract bytecode setup, build tags, and GPG binary verification."
 ---
 
 Building `axelard` from source gives you full control over the binary you run. The Axelar Core repository supports three build paths: a statically linked binary (recommended for production), a dynamically linked binary for local development, and Docker images for containerized deployments. Before building, you must also supply gateway smart contract bytecode from the `axelar-cgp-solidity` releases.
@@ -186,7 +186,7 @@ If you prefer to download a pre-built binary from the [Axelar Core releases page
 
     A successful verification prints:
 
-    ```
+    ```text
     Good signature from "Axelar Network Devs <eng@axelar.network>" [ultimate]
     ```
   </Step>

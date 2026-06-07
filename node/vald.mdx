@@ -1,14 +1,14 @@
 ---
 title: "Vald: Axelar's External Validator Daemon Explained"
 sidebarTitle: "Vald"
-description: "Learn how vald monitors EVM chains, participates in threshold signing via tofnd, and connects to axelard over RPC. Covers configuration, startup flags, and proxy registration."
+description: "Learn how vald monitors EVM chains, signs via tofnd, and connects to axelard over RPC. Covers vald.toml fields, startup flags, and proxy registration."
 ---
 
 Vald (Validator Daemon) is a long-running process that runs alongside `axelard` on validator nodes. While `axelard` handles consensus and on-chain state, vald watches for cross-chain events — such as new EVM gateway transactions or multisig keygen sessions — and participates in threshold signing by relaying signing requests to the `tofnd` daemon. Vald connects to the `axelard` node via CometBFT RPC and broadcasts transactions back to the chain using a dedicated broadcaster account.
 
 ## Architecture Overview
 
-```
+```text
 ┌─────────────────────────────────────┐
 │         Axelar Validator Host       │
 │                                     │
@@ -57,7 +57,7 @@ axelard vald-start \
 </ParamField>
 
 <ParamField path="--from" type="string">
-  Name or address of the broadcaster key in the local keyring. This account signs and broadcasts transactions on behalf of the validator. Falls back to the `broadcast.broadcaster-account` field in `vald.toml`.
+  Name or address of the broadcaster key in the local keyring. This account signs and broadcasts transactions on behalf of the validator. Falls back to the `broadcast.broadcaster-account` key in `vald.toml` (under `[broadcast]`).
 </ParamField>
 
 <ParamField path="--tofnd-host" type="string">
@@ -130,6 +130,10 @@ Vald reads `~/.axelar/config/vald.toml` for detailed configuration. Below are al
 
 These live under the `[broadcast]` section in `vald.toml`:
 
+<ParamField path="broadcast.broadcaster-account" type="string">
+  Keyring key name used as the broadcaster account when `--from` is not passed on the command line. Read directly by vald from the config file; set to the name of your broadcaster key (e.g. `"broadcaster"`).
+</ParamField>
+
 <ParamField path="broadcast.max_retries" type="int" default="5">
   Maximum number of retry attempts for a failed broadcast. All broadcasts go through a serialized queue, so retries block other broadcasts.
 </ParamField>
@@ -144,10 +148,6 @@ These live under the `[broadcast]` section in `vald.toml`:
 
 <ParamField path="broadcast.confirmation_polling_interval" type="duration" default="400ms">
   How often vald polls the node to check whether a broadcasted transaction has been included in a block.
-</ParamField>
-
-<ParamField path="broadcast.broadcaster-account" type="string">
-  Default keyring key name used as the broadcaster when `--from` is not passed on the command line.
 </ParamField>
 
 ### TssConfig (tofnd connection)
@@ -292,7 +292,7 @@ axelard tx multisig keygen opt-out \
 
 Create `/etc/systemd/system/vald.service`:
 
-```toml
+```ini
 [Unit]
 Description=Axelar Vald Daemon
 After=axelard.service
@@ -339,13 +339,13 @@ rm ~/.axelar/vald/state.json
 
 ## Recovery from tofnd Key Loss
 
-If the tofnd key material needs to be recovered from a mnemonic, pass the recovery file path when starting vald:
+If tofnd key material needs to be recovered, the Docker entrypoint supports this through the `RECOVERY_FILE` environment variable. Set `RECOVERY_FILE` to the path of a JSON recovery file inside the container, and the entrypoint will pass it to the startup sequence automatically:
 
 ```bash
-axelard vald-start \
-  --tofnd-recovery=/path/to/recovery.json \
-  --validator-addr axelarvaloper1... \
-  --from broadcaster
+docker run \
+  -e RECOVERY_FILE=/home/axelard/recovery.json \
+  -v /path/to/recovery.json:/home/axelard/recovery.json \
+  axelar/core
 ```
 
-The Docker entrypoint also supports this through the `RECOVERY_FILE` environment variable.
+Refer to the [tofnd documentation](https://github.com/axelarnetwork/tofnd) for the format of the recovery file and the key recovery procedure.

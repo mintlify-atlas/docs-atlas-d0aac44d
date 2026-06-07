@@ -1,5 +1,5 @@
 ---
-title: "Chain Management: EVM, IBC & Asset Operations"
+title: "Chain Management: EVM, IBC, and Cross-Chain Assets"
 sidebarTitle: "Chain Management"
 description: "Step-by-step reference for adding EVM and Cosmos chains to Axelar, registering assets, managing chain maintainers, and configuring cross-chain fees."
 ---
@@ -203,7 +203,7 @@ A chain must be activated before it accepts cross-chain transfers. Activation an
   </Step>
   <Step title="Verify chain status">
     ```bash
-    axelard query nexus chain-info [chain]
+    axelard query nexus chain-state [chain]
     ```
     Confirm `activated: true` in the output.
   </Step>

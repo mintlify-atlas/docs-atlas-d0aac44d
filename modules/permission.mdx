@@ -1,7 +1,7 @@
 ---
-title: "Permission Module: Governance Key and Controller Roles"
+title: "Permission Module: Governance Keys and Controller Roles"
 sidebarTitle: "Permission"
-description: "The Permission module manages Axelar's governance key — a threshold multisig that authorizes privileged operations — and a set of controller accounts with elevated network access."
+description: "The Permission module stores Axelar's governance key and controller accounts, enforcing role-based access control for privileged network operations."
 ---
 
 The Permission module is Axelar's access-control layer for privileged operations that should not be executable by ordinary accounts. It stores a **governance key** — a Cosmos SDK k-of-n multisig public key — whose signatures authorize sensitive transactions like chain registration, token deployment, and key rotation. It also maintains a list of **controller** accounts that can send certain privileged transactions without needing the full governance multisig. Together these two mechanisms give the Axelar core team and community a graduated trust model for network management.
@@ -53,7 +53,7 @@ func NewGovAccount(addr sdk.AccAddress, role exported.Role) GovAccount {
 }
 ```
 
-The only supported privileged role is `ROLE_CHAIN_MANAGEMENT`, which grants permission to register chains, assets, and perform other administrative actions without requiring the full governance multisig signature.
+The two privileged roles are `ROLE_CHAIN_MANAGEMENT`, which grants permission to register chains and assets without requiring the full governance multisig signature, and `ROLE_ACCESS_CONTROL`, which is held by the governance key address itself and is required to register or deregister controllers.
 
 ### Controller vs Governance Key
 

@@ -1,7 +1,7 @@
 ---
-title: "Snapshot Module: Validator Proxy and Participation Tracking"
+title: "Snapshot Module: Validator Proxy and Participation"
 sidebarTitle: "Snapshot"
-description: "The Snapshot module tracks validator participation in Axelar by managing proxy account registrations that allow vald operators to broadcast transactions on behalf of their validators."
+description: "The Snapshot module lets validators register proxy accounts for vald, tracking proxy status and enforcing a minimum balance for operational readiness."
 ---
 
 The Snapshot module bridges Axelar's validator set with the operational demands of cross-chain work. Because validators must submit many transactions per block — event confirmations, vote submissions, signature shares — they register a **proxy account** through this module. The proxy acts on the validator's behalf, allowing automated vald processes to broadcast transactions without exposing the validator's main key. The module also tracks which proxies are active, enabling the rest of the system to identify the operator behind any proxy address.
@@ -50,7 +50,7 @@ func (m ProxiedValidator) Validate() error {
 }
 ```
 
-The `Active` flag is `true` after registration and `false` after the validator calls `deactivate-proxy`.
+The `Active` field is `true` immediately after registration. Calling `deactivate-proxy` sets it to `false`, preventing the proxy from submitting further authorized transactions.
 
 ### Snapshot
 

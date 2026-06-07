@@ -7,7 +7,7 @@ description: "Reference for all axelard query axelarnet subcommands: IBC path lo
 The `axelard query axelarnet` command group provides read-only access to Axelar's Axelarnet module state. The Axelarnet module manages Axelar's native IBC integrations with Cosmos chains — tracking the IBC channel paths used to route cross-chain transfers and monitoring pending outbound IBC transfers. Use these subcommands to look up IBC path registrations and inspect module parameters without submitting any transaction.
 
 <Info>
-  Most Axelarnet query subcommands accept `--node`, `--grpc-addr`, `--height`, and `--output` flags. Note that `ibc-transfer-count` only supports the standard inherited flags and does not accept gRPC or node options.
+  Most Axelarnet query subcommands accept `--node`, `--grpc-addr`, `--height`, and `--output` flags. The `ibc-transfer-count` subcommand does not expose gRPC or node connection options — it only inherits the global `--output`, `--home`, `--log_level`, and `--trace` flags.
 </Info>
 
 ## Global Flags
@@ -171,6 +171,10 @@ axelard query axelarnet ibc-transfer-count [flags]
 
 <ParamField path="-h / --help" type="boolean">
   Display help for this command.
+</ParamField>
+
+<ParamField path="--output" type="string">
+  Output format: `text` or `json`. Defaults to `text`. Inherited from the parent command group.
 </ParamField>
 
 **Example**

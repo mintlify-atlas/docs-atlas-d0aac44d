@@ -1,7 +1,7 @@
 ---
 title: "Reward Module: Validator Inflation Rewards on Axelar"
 sidebarTitle: "Reward"
-description: "The Reward module distributes inflation-based rewards to validators for maintaining external chains and participating in key management, with configurable rates for each activity."
+description: "The Reward module allocates block inflation to validators for chain maintenance voting and key management participation, with governance-tunable rates."
 ---
 
 The Reward module allocates a portion of Axelar's block inflation to validators who perform cross-chain work. Validators earn rewards in two categories: **external chain voting** rewards for participating in EVM event confirmation polls, and **key management** rewards for participating in multisig keygen and signing sessions. These incentives are critical for ensuring that validators remain engaged with the operational duties that secure Axelar's cross-chain infrastructure.
@@ -132,14 +132,12 @@ axelard query reward params
 
 ```bash
 # Refund fees for a specific message (governance/operational use)
-axelard tx reward refund-msg [msg-json] \
+axelard tx reward refund-msg \
   --from <gov-key> \
   --chain-id axelar-dojo-1
 
-# Update reward module parameters via governance
+# Update reward module parameters via governance proposal
 axelard tx reward update-params \
-  --external-chain-voting-inflation-rate 0.05 \
-  --key-mgmt-relative-inflation-rate 0.1 \
   --from <gov-key> \
   --chain-id axelar-dojo-1
 ```

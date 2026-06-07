@@ -1,7 +1,7 @@
 ---
-title: "EVM Transaction Commands for Axelar Core CLI"
+title: "EVM Transaction Commands — axelard tx evm CLI"
 sidebarTitle: "EVM Transactions"
-description: "Submit EVM-module transactions with axelard: add chains, set gateways, deploy tokens, confirm events, sign commands, and rotate operatorship."
+description: "Use axelard tx evm to add EVM chains, set gateway contracts, deploy cross-chain tokens, confirm events, sign pending commands, and transfer operatorship."
 ---
 
 The `axelard tx evm` command group provides all transaction subcommands needed to manage EVM-compatible chains on the Axelar network. These commands allow operators and validators to register new chains, configure gateway contracts, deploy cross-chain tokens, confirm on-chain events, and sign batched gateway commands. All subcommands require a funded signing account and an active connection to an Axelar node.
@@ -15,7 +15,7 @@ Registers a new EVM chain with the Axelar network. The chain configuration must 
 **Syntax**
 
 ```bash
-axelard tx evm add-chain [name] [chain-config] [flags]
+axelard tx evm add-chain [name] [chain config] [flags]
 ```
 
 **Arguments**
@@ -24,7 +24,7 @@ axelard tx evm add-chain [name] [chain-config] [flags]
   Human-readable name for the new EVM chain (e.g. `ethereum`, `avalanche`).
 </ParamField>
 
-<ParamField path="chain-config" type="string" required>
+<ParamField path="chain config" type="string" required>
   Path to a JSON file containing the chain's key requirements and EVM module parameters.
 </ParamField>
 
@@ -140,24 +140,24 @@ Creates a deploy-token command targeting the AxelarGateway contract so that a wr
 **Syntax**
 
 ```bash
-axelard tx evm create-deploy-token [evm-chain] [origin-chain] [origin-asset] [token-name] [symbol] [decimals] [capacity] [mintLimit] [flags]
+axelard tx evm create-deploy-token [evm chain] [origin chain] [origin asset] [token name] [symbol] [decimals] [capacity] [mintLimit] [flags]
 ```
 
 **Arguments**
 
-<ParamField path="evm-chain" type="string" required>
+<ParamField path="evm chain" type="string" required>
   Target EVM chain where the token will be deployed (e.g. `ethereum`).
 </ParamField>
 
-<ParamField path="origin-chain" type="string" required>
+<ParamField path="origin chain" type="string" required>
   Chain where the asset originates (e.g. `axelarnet`, `cosmos`).
 </ParamField>
 
-<ParamField path="origin-asset" type="string" required>
+<ParamField path="origin asset" type="string" required>
   Denom or identifier of the asset on the origin chain (e.g. `uaxl`).
 </ParamField>
 
-<ParamField path="token-name" type="string" required>
+<ParamField path="token name" type="string" required>
   Full display name of the token (e.g. `"Axelar"`).
 </ParamField>
 
@@ -309,7 +309,7 @@ Confirms that an ERC-20 token has been deployed on a target EVM chain for an ass
 **Syntax**
 
 ```bash
-axelard tx evm confirm-erc20-token [chain] [origin-chain] [origin-asset] [txID] [flags]
+axelard tx evm confirm-erc20-token [chain] [origin chain] [origin asset] [txID] [flags]
 ```
 
 **Arguments**
@@ -318,11 +318,11 @@ axelard tx evm confirm-erc20-token [chain] [origin-chain] [origin-asset] [txID] 
   EVM chain where the token was deployed (e.g. `ethereum`).
 </ParamField>
 
-<ParamField path="origin-chain" type="string" required>
+<ParamField path="origin chain" type="string" required>
   Chain from which the asset originates (e.g. `axelarnet`).
 </ParamField>
 
-<ParamField path="origin-asset" type="string" required>
+<ParamField path="origin asset" type="string" required>
   Asset denom on the origin chain (e.g. `uaxl`).
 </ParamField>
 
@@ -564,7 +564,7 @@ Retries processing of a previously failed event for a given EVM chain. Use this 
 **Syntax**
 
 ```bash
-axelard tx evm retry-event [chain] [event-id] [flags]
+axelard tx evm retry-event [chain] [event ID] [flags]
 ```
 
 **Arguments**
@@ -573,7 +573,7 @@ axelard tx evm retry-event [chain] [event-id] [flags]
   Name of the EVM chain that emitted the event (e.g. `ethereum`).
 </ParamField>
 
-<ParamField path="event-id" type="string" required>
+<ParamField path="event ID" type="string" required>
   Unique identifier of the failed event to retry.
 </ParamField>
 

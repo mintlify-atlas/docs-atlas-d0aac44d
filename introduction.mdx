@@ -1,5 +1,5 @@
 ---
-title: "Axelar Core: Decentralized Cross-Chain Protocol"
+title: "Axelar Core: Decentralized Cross-Chain Interoperability"
 sidebarTitle: "Introduction"
 description: "Learn what Axelar Core is, its custom Cosmos SDK modules, and how validators, integrators, and developers can leverage the protocol."
 ---
@@ -19,16 +19,16 @@ Axelar Core is the main blockchain application powering the Axelar Network — a
 ## Key Use Cases
 
 <CardGroup cols={2}>
-  <Card title="Cross-Chain Asset Transfers" icon="arrow-right-arrow-left" href="./quickstart">
+  <Card title="Cross-Chain Asset Transfers" icon="arrow-right-arrow-left" href="/quickstart">
     Move tokens natively between EVM chains, IBC chains, and Cosmos-based networks. The EVM module manages gateway contracts and command batches; the axelarnet module handles IBC transfers; the nexus module coordinates routing between all registered chains.
   </Card>
-  <Card title="General Message Passing (GMP)" icon="envelope" href="./architecture">
+  <Card title="General Message Passing (GMP)" icon="envelope" href="/architecture">
     Call arbitrary smart-contract functions on a destination chain from any source chain. A `ContractCall` or `ContractCallWithToken` event on the source chain's gateway is confirmed by validators, routed through nexus, and delivered as an `ApproveContractCall` command on the destination gateway.
   </Card>
-  <Card title="Validator Participation" icon="server" href="./quickstart">
+  <Card title="Validator Participation" icon="server" href="/quickstart">
     Run an `axelard` full node and the `vald` sidecar to become a chain maintainer. Vote on cross-chain events, participate in multisig key generation, and earn rewards proportional to correct participation.
   </Card>
-  <Card title="Protocol Integration" icon="plug" href="./architecture">
+  <Card title="Protocol Integration" icon="plug" href="/architecture">
     Register a new EVM or IBC chain with the Axelar Network through governance, deploy a gateway contract, and enable token transfers and GMP for your users without running custom bridge infrastructure.
   </Card>
 </CardGroup>
@@ -84,10 +84,10 @@ Axelar Core extends the standard Cosmos SDK module set with a suite of purpose-b
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Quickstart" icon="rocket" href="./quickstart">
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
     Build or download the `axelard` binary, satisfy the smart-contract bytecode dependency, and start a node in minutes.
   </Card>
-  <Card title="Architecture" icon="sitemap" href="./architecture">
+  <Card title="Architecture" icon="sitemap" href="/architecture">
     Explore the component topology — axelard, vald, tofnd — and trace a cross-chain message from source chain to destination contract.
   </Card>
 </CardGroup>

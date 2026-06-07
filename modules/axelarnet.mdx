@@ -1,7 +1,7 @@
 ---
-title: "Axelarnet Module: IBC Connectivity for Cosmos Chains"
+title: "Axelarnet: IBC and Cosmos Chain Connectivity Module"
 sidebarTitle: "Axelarnet"
-description: "The Axelarnet module bridges Cosmos IBC chains into Axelar, managing IBC paths, asset registration, transfer routing, IBC hooks, and fee collection for Cosmos-based networks."
+description: "Axelarnet bridges IBC-connected Cosmos chains into Axelar by managing IBC paths, asset registration, transfer routing, and general message passing."
 ---
 
 The Axelarnet module is Axelar's gateway for Cosmos SDK chains that communicate over IBC. It maintains a registry of IBC-connected chains, maps each chain to an IBC channel path, routes incoming and outgoing transfers via `ibc-transfer`, and supports IBC hook-based general message passing. Any Cosmos chain that shares an IBC channel with Axelar and is registered in this module can send and receive assets through the Axelar network.

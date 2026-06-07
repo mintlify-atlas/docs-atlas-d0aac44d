@@ -1,7 +1,7 @@
 ---
-title: "Vote Module: Quadratic Voting for Cross-Chain Events"
+title: "Vote Module: Cross-Chain Event Confirmation Voting"
 sidebarTitle: "Vote"
-description: "The Vote module implements stake-weighted quadratic voting for confirming external chain events, managing poll lifecycle from creation through threshold completion or expiry."
+description: "The Vote module implements quadratic voting to confirm external chain events, managing poll lifecycles from creation through completion or expiry."
 ---
 
 The Vote module is Axelar's mechanism for reaching decentralized consensus on events that occur on external chains. When validators observe a transaction on an EVM chain — a token deposit, gateway command, or general message — they open a **poll** and cast votes. The module tallies voting power using quadratic weighting and closes the poll once a threshold is reached or the poll expires. Other modules (EVM, axelarnet) register handlers with the Vote module's router to process the result of each poll.
@@ -66,7 +66,9 @@ Modules register a handler function identified by module name. When a poll compl
 // VoteRouter dispatches poll results to module handlers
 type VoteRouter interface {
     AddHandler(module string, handler exported.VoteHandler) VoteRouter
-    Handler(module string) (exported.VoteHandler, bool)
+    HasHandler(module string) bool
+    GetHandler(module string) exported.VoteHandler
+    Seal()
 }
 ```
 

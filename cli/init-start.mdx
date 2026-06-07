@@ -233,6 +233,18 @@ axelard health-check \
   Port of the TSS daemon. Defaults to `50051`.
 </ParamField>
 
+<ParamField path="--grpc-addr" type="string">
+  The gRPC endpoint to use for this chain.
+</ParamField>
+
+<ParamField path="--grpc-insecure" type="boolean">
+  Allow gRPC over insecure channels. If not set, the server must use TLS.
+</ParamField>
+
+<ParamField path="--height" type="int">
+  Query state at a specific block height. May error if the node has pruned that height.
+</ParamField>
+
 <ParamField path="--skip-broadcaster" type="boolean">
   Skip the broadcaster account balance check.
 </ParamField>

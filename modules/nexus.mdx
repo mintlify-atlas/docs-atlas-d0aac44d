@@ -1,7 +1,7 @@
 ---
-title: "Nexus Module: Cross-Chain Message Routing Hub"
+title: "Nexus Module: Axelar Cross-Chain Routing and Registry"
 sidebarTitle: "Nexus"
-description: "The Nexus module is Axelar's central routing layer, managing registered chains, cross-chain transfers, general messages, asset fees, and chain maintainer participation."
+description: "Nexus is Axelar's routing layer managing chains, cross-chain transfers, general messages, asset fees, and chain maintainer participation."
 ---
 
 The Nexus module is the backbone of Axelar's interoperability protocol. It maintains a registry of all supported chains, routes cross-chain messages and asset transfers between them, tracks transfer states, and manages the set of validator maintainers responsible for each external chain. Every asset transfer and general message that moves through Axelar passes through this module.
@@ -77,7 +77,8 @@ Transfers move through the following states:
 |---|---|
 | `TRANSFER_STATE_PENDING` | Queued but not yet executed |
 | `TRANSFER_STATE_ARCHIVED` | Successfully completed |
-| `TRANSFER_STATE_INSUFFICIENT_FEE` | Rejected due to fee shortfall |
+| `TRANSFER_STATE_INSUFFICIENT_AMOUNT` | Rejected because the transferred amount did not cover the minimum fee |
+| `TRANSFER_STATE_FAILED` | Transfer failed during execution |
 
 ### GeneralMessage
 

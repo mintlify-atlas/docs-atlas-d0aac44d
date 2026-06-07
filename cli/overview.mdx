@@ -43,18 +43,6 @@ These flags are inherited by every `axelard` subcommand.
   Output format for commands that return structured data: `text` or `json`. Defaults to `text`.
 </ParamField>
 
-<ParamField path="--keyring-backend" type="string">
-  Keyring storage backend for signing operations: `os`, `file`, `kwallet`, `pass`, `test`, or `memory`. Defaults to `file`.
-</ParamField>
-
-<ParamField path="--chain-id" type="string">
-  The network chain ID (e.g. `axelar-dojo-1`). Required for transaction-signing commands.
-</ParamField>
-
-<ParamField path="--node" type="string">
-  CometBFT RPC endpoint to connect to, in `host:port` form. Defaults to `tcp://localhost:26657`.
-</ParamField>
-
 ---
 
 ## Quick Status Checks
@@ -92,6 +80,7 @@ Performs a readiness check against the node and the TSS daemon (`tofnd`). Report
 ```bash
 axelard health-check \
   --operator-addr axelarvaloper1... \
+  --node tcp://localhost:26657 \
   --tofnd-host localhost \
   --tofnd-port 50051
 ```
@@ -99,8 +88,12 @@ axelard health-check \
 | Flag | Default | Purpose |
 |---|---|---|
 | `--operator-addr` | — | Operator address to check |
+| `--node` | `tcp://localhost:26657` | CometBFT RPC endpoint |
 | `--tofnd-host` | `localhost` | Hostname of the TSS daemon |
 | `--tofnd-port` | `50051` | Port of the TSS daemon |
+| `--grpc-addr` | — | gRPC endpoint for this chain |
+| `--grpc-insecure` | false | Allow gRPC over insecure channels |
+| `--height` | — | Query state at a specific block height |
 | `--skip-broadcaster` | false | Skip broadcaster balance check |
 | `--skip-operator` | false | Skip operator registration check |
 | `--skip-tofnd` | false | Skip TSS daemon reachability check |
@@ -169,7 +162,7 @@ axelard vald-sign [key-id] [validator-addr] [hash-to-sign] \
   <Card title="Genesis Configuration" icon="file-code" href="/cli/genesis">
     Bootstrap a new chain: add genesis accounts, create validator gentxs, configure Axelar-specific parameters, and validate the genesis file.
   </Card>
-  <Card title="Transactions" icon="arrow-right-arrow-left" href="/cli/overview">
+  <Card title="Transactions" icon="arrow-right-arrow-left" href="/cli/tx-evm">
     Submit on-chain transactions via `axelard tx` — delegate, vote on governance proposals, interact with cross-chain modules, and more.
   </Card>
 </CardGroup>

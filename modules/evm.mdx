@@ -1,7 +1,7 @@
 ---
-title: "EVM Module: Axelar EVM Chain Integration Layer"
+title: "EVM Module: Ethereum-Compatible Chain Integration Layer"
 sidebarTitle: "EVM"
-description: "The EVM module integrates Ethereum-compatible chains into Axelar, managing Gateway contracts, command batches, event confirmation, token deployment, and cross-chain signing."
+description: "The EVM module connects Axelar to Ethereum-compatible chains, managing Gateway contracts, command batches, event confirmation, and ERC20 token deployment."
 ---
 
 The EVM module connects Axelar to every supported Ethereum-compatible chain. It manages the on-chain Axelar Gateway contract for each EVM network, assembles and signs batches of commands (token deployments, mints, burns, and operatorship transfers), and orchestrates the end-to-end confirmation flow for EVM events. Validators observe external chain events and vote on them through this module before commands are signed and sent back to the gateway.
@@ -150,7 +150,7 @@ axelard tx evm confirm-erc20-token ethereum \
   </ParamField>
 
   <ParamField path="VotingGracePeriod" type="int64" required>
-    Number of blocks after a poll expires during which late votes are still accepted. Default: `2` blocks (adjusted to `15` for 1s block time networks).
+    Number of blocks after a poll expires during which late votes are still accepted. Default: `2` blocks.
   </ParamField>
 
   <ParamField path="RevoteLockingPeriod" type="int64" required>
@@ -175,7 +175,7 @@ axelard tx evm confirm-erc20-token ethereum \
 </Accordion>
 
 <Warning>
-The `RevoteLockingPeriod` and `VotingGracePeriod` were updated from 15/3 to 75/15 blocks with the introduction of 1-second block times in v1.3.0. Ensure your vald configuration reflects these new values.
+The `RevoteLockingPeriod` default was updated to 75 blocks (15 × 5) with the introduction of 1-second block times in v1.3.0. The `VotingGracePeriod` default is 2 blocks. Ensure your vald configuration reflects these values.
 </Warning>
 
 ## CLI Reference

@@ -129,34 +129,34 @@ The following diagram traces a General Message Passing (GMP) call from a user's 
 ```mermaid
 sequenceDiagram
     participant User as User / dApp
-    participant SrcGW as Source Gateway<br/>(EVM contract)
-    participant Vald as vald sidecars<br/>(all validators)
-    participant Chain as axelard<br/>(on-chain state)
-    participant DstGW as Destination Gateway<br/>(EVM contract)
+    participant SrcGW as Source Gateway (EVM)
+    participant Vald as vald sidecars (all validators)
+    participant Chain as axelard (on-chain state)
+    participant DstGW as Destination Gateway (EVM)
     participant DstContract as Destination Contract
 
     User->>SrcGW: callContract(destChain, destAddr, payload)
     SrcGW-->>SrcGW: emit ContractCall event
 
-    Note over Vald: vald polls EVM RPC<br/>detects ContractCall log
+    Note over Vald: vald polls EVM RPC, detects ContractCall log
 
     Vald->>Chain: MsgVoteEvents (cast vote on poll)
-    Note over Chain: vote module accumulates votes;<br/>quorum reached → poll finalized
+    Note over Chain: vote module accumulates votes; quorum reached, poll finalized
 
-    Chain->>Chain: evm EndBlocker:<br/>confirmed event → nexus GeneralMessage
+    Chain->>Chain: evm EndBlocker: confirmed event to nexus GeneralMessage
 
-    Chain->>Chain: nexus EndBlocker:<br/>route message to destination chain queue
+    Chain->>Chain: nexus EndBlocker: route message to destination chain queue
 
-    Chain->>Chain: evm EndBlocker:<br/>GeneralMessage → ApproveContractCall command<br/>added to pending batch
+    Chain->>Chain: evm EndBlocker: GeneralMessage to ApproveContractCall command batch
 
-    Chain->>Chain: multisig: signing session initiated<br/>snapshot selects validator participants
+    Chain->>Chain: multisig: signing session initiated, snapshot selects participants
 
-    Note over Vald: vald sees SigningStarted event;<br/>calls tofnd for threshold signature
+    Note over Vald: vald sees SigningStarted event, calls tofnd for threshold signature
 
     Vald->>Chain: MsgSubmitSignature (each validator)
-    Note over Chain: multisig assembles threshold sig;<br/>batch status → SIGNED
+    Note over Chain: multisig assembles threshold sig; batch status SIGNED
 
-    Note over DstGW: Off-chain relayer reads signed batch<br/>from axelard and submits to destination
+    Note over DstGW: Off-chain relayer reads signed batch from axelard and submits
 
     DstGW->>DstContract: execute(payload)
 ```
@@ -269,10 +269,10 @@ As of v1.3.0, **optimistic block execution** is enabled for improved throughput,
 ## Next Steps
 
 <CardGroup cols={2}>
-  <Card title="Quickstart" icon="rocket" href="./quickstart">
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
     Build the axelard binary and launch your first node.
   </Card>
-  <Card title="Introduction" icon="book-open" href="./introduction">
+  <Card title="Introduction" icon="book-open" href="/introduction">
     Review the full list of custom modules and target audiences.
   </Card>
 </CardGroup>

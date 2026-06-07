@@ -1,7 +1,7 @@
 ---
-title: "Axelarnet Transaction Commands for Axelar Core CLI"
+title: "Axelarnet Transaction Commands — axelard tx axelarnet"
 sidebarTitle: "Axelarnet Transactions"
-description: "Submit Axelarnet module transactions with axelard: add Cosmos chains, register assets, route IBC transfers, and relay general messages."
+description: "Send Axelarnet module transactions with axelard tx axelarnet: add Cosmos chains, register assets, route IBC transfers, and relay approved general messages."
 ---
 
 The `axelard tx axelarnet` command group contains all transaction subcommands for managing the Axelarnet module. These commands let operators register new Cosmos-based chains and their assets, configure fee collection, route pending IBC transfers, relay approved general messages, and recover from failed IBC transfers. Most operations require governance approval or validator-level privileges.
@@ -15,7 +15,7 @@ Adds a new Cosmos-SDK-based chain to the Axelar network. You must supply the cha
 **Syntax**
 
 ```bash
-axelard tx axelarnet add-cosmos-based-chain [name] [address-prefix] [ibc-path] [native-asset]... [flags]
+axelard tx axelarnet add-cosmos-based-chain [name] [address prefix] [ibc path] [native asset]... [flags]
 ```
 
 **Arguments**
@@ -24,15 +24,15 @@ axelard tx axelarnet add-cosmos-based-chain [name] [address-prefix] [ibc-path] [
   Human-readable name for the Cosmos chain (e.g. `osmosis`).
 </ParamField>
 
-<ParamField path="address-prefix" type="string" required>
+<ParamField path="address prefix" type="string" required>
   Bech32 address prefix used by the chain (e.g. `osmo`).
 </ParamField>
 
-<ParamField path="ibc-path" type="string" required>
+<ParamField path="ibc path" type="string" required>
   IBC connection path that links Axelar to the chain (e.g. `channel-3`).
 </ParamField>
 
-<ParamField path="native-asset" type="string" required>
+<ParamField path="native asset" type="string" required>
   One or more native asset denoms supported by the chain (space-separated, e.g. `uosmo`).
 </ParamField>
 
@@ -163,12 +163,12 @@ Designates the Axelarnet account that will collect cross-chain transfer fees. On
 **Syntax**
 
 ```bash
-axelard tx axelarnet register-fee-collector [fee-collector] [flags]
+axelard tx axelarnet register-fee-collector [fee collector] [flags]
 ```
 
 **Arguments**
 
-<ParamField path="fee-collector" type="string" required>
+<ParamField path="fee collector" type="string" required>
   Bech32 Axelar address that will receive collected fees (e.g. `axelar1...`).
 </ParamField>
 
@@ -325,12 +325,12 @@ Routes a previously approved general message to its destination chain. The calle
 **Syntax**
 
 ```bash
-axelard tx axelarnet route-message [message-id] [payload] [flags]
+axelard tx axelarnet route-message [message ID] [payload] [flags]
 ```
 
 **Arguments**
 
-<ParamField path="message-id" type="string" required>
+<ParamField path="message ID" type="string" required>
   Unique identifier of the approved general message (assigned by the Axelar network upon approval).
 </ParamField>
 
@@ -391,12 +391,12 @@ Re-attempts an IBC transfer that previously failed (for example, due to a closed
 **Syntax**
 
 ```bash
-axelard tx axelarnet retry-ibc-transfer [transfer-id] [flags]
+axelard tx axelarnet retry-ibc-transfer [transfer ID] [flags]
 ```
 
 **Arguments**
 
-<ParamField path="transfer-id" type="uint64" required>
+<ParamField path="transfer ID" type="uint64" required>
   Numeric identifier of the failed IBC transfer to retry.
 </ParamField>
 

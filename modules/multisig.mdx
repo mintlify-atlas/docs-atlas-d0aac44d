@@ -1,7 +1,7 @@
 ---
-title: "Multisig Module: Threshold Signing for Cross-Chain Ops"
+title: "Multisig Module: Distributed Threshold Key Management"
 sidebarTitle: "Multisig"
-description: "The Multisig module coordinates threshold multi-party key generation and signing sessions, enabling Axelar validators to collectively sign EVM command batches and rotate gateway keys."
+description: "The Multisig module coordinates threshold keygen and signing sessions so validators collectively sign EVM command batches and rotate gateway keys."
 ---
 
 The Multisig module implements distributed threshold cryptography for Axelar validators. It manages the full lifecycle of multi-party key generation (keygen) and signing sessions used to authorize gateway command batches on EVM chains. When a validator set needs to sign a new command batch or rotate the active gateway key, this module coordinates the distributed signing ceremony across all participating validators.
@@ -126,7 +126,7 @@ When the EVM module calls `sign-commands`, the Multisig module creates a new sig
 4. The aggregated `CommandBatch` signature is stored and can be queried for submission to the gateway.
 
 <Note>
-Signing sessions have a `SigningTimeout` (default 50 blocks) and a `SigningGracePeriod` (default 3 blocks) after expiry during which late submissions are still accepted.
+Signing sessions have a `SigningTimeout` (default 50 blocks = `10 × 5` for 1s block time) and a `SigningGracePeriod` (default 3 blocks) after expiry during which late submissions are still accepted.
 </Note>
 
 ## Key Rotation
@@ -174,7 +174,7 @@ After rotation, the old key epoch is archived and the new key becomes the active
 </Accordion>
 
 <Warning>
-The `KeygenTimeout` and `SigningTimeout` were updated from 10 to 50 blocks in v1.3.0 to match 1-second block times. In practice this preserves approximately the same wall-clock duration as before.
+The `KeygenTimeout` and `SigningTimeout` defaults are 50 blocks (`10 × 5` speed-up factor for 1-second block times). The `KeygenGracePeriod` and `SigningGracePeriod` defaults are 3 blocks each. These values were chosen to preserve approximately the same wall-clock duration as older, slower block times.
 </Warning>
 
 ## CLI Reference

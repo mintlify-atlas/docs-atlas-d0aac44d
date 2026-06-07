@@ -1,5 +1,5 @@
 ---
-title: "Quickstart: Build and Run an Axelar Core Node"
+title: "Quickstart: Build, Verify, and Run an Axelar Core Node"
 sidebarTitle: "Quickstart"
 description: "Install dependencies, build or download a verified axelard binary, satisfy the EVM bytecode requirement, and launch your first Axelar Core node."
 ---
@@ -16,7 +16,7 @@ Getting Axelar Core up and running requires three things: the `axelard` binary, 
 
 ## Prerequisites
 
-- **Go 1.23+** (required for source builds)
+- **Go 1.25+** (required for source builds)
 - **Docker** (required for `make build-static` and `make docker-image`)
 - **Git** and standard build tools (`make`, `gcc`)
 - **GPG** (required if verifying a downloaded binary)
@@ -133,7 +133,7 @@ Pre-built binaries are published on the [Axelar Core releases page](https://gith
     ```
 
     A successful verification produces output like:
-    ```
+    ```text
     Good signature from "Axelar Network Devs <eng@axelar.network>" [ultimate]
     ```
 
@@ -193,7 +193,7 @@ Once you have the `axelard` binary available, initialize and start the node:
     ```
 
     This creates a default configuration and genesis template under `~/.axelar/`:
-    ```
+    ```text
     ~/.axelar/
     ├── config/
     │   ├── app.toml
@@ -247,7 +247,7 @@ Once you have the `axelard` binary available, initialize and start the node:
     ```
 
     <Note>
-      `vald` connects to the `tofnd` threshold-signing daemon over gRPC. Ensure `tofnd` is running and reachable before starting `vald`. See the [Architecture](./architecture) page for the full component topology.
+      `vald` connects to the `tofnd` threshold-signing daemon over gRPC. Ensure `tofnd` is running and reachable before starting `vald`. See the [Architecture](/architecture) page for the full component topology.
     </Note>
   </Step>
 </Steps>

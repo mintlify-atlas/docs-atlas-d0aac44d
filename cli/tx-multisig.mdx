@@ -1,7 +1,7 @@
 ---
-title: "Multisig Transaction Commands for Axelar Core CLI"
+title: "Multisig Transaction Commands — axelard tx multisig"
 sidebarTitle: "Multisig Transactions"
-description: "Submit multisig module transactions with axelard: start key generation, opt in or out of keygens, and rotate chain keys using proxy addresses."
+description: "Send multisig module transactions with axelard tx multisig: start distributed key generation, opt in or out of keygens, and rotate chain signing keys."
 ---
 
 The `axelard tx multisig` command group provides transaction subcommands for managing the Axelar multisig key lifecycle. Validators use these commands to participate in distributed key generation (keygen), control their participation in future keygen rounds, and rotate the active signing key for a given EVM chain. All keygen participation commands must be sent from the validator's registered **proxy address**, not the validator operator address.
